@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <RootNamespace>Blackhorse311.BotMind.Server</RootNamespace>
+    <AssemblyName>Blackhorse311.BotMind.Server</AssemblyName>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <OutputType>Library</OutputType>
+    <Version>1.0.0</Version>
+    <Authors>Blackhorse311</Authors>
+    <Description>Server-side component for BotMind mod - handles configuration and data endpoints</Description>
+    <!-- Suppress CS9107: Primary constructor parameter captured warning (intentional pattern) -->
+    <NoWarn>CS9107</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- SPT Server NuGet packages (4.0.12) -->
+    <PackageReference Include="SPTarkov.Common" Version="4.0.12" />
+    <PackageReference Include="SPTarkov.DI" Version="4.0.12" />
+    <PackageReference Include="SPTarkov.Server.Core" Version="4.0.12" />
+    <PackageReference Include="SPTarkov.Reflection" Version="4.0.12" />
+  </ItemGroup>
+
+  <!-- Copy output to SPT user/mods folder (only when SPT_PATH is set) -->
+  <Target Name="CopyToMods" AfterTargets="Build" Condition="'$(SptPath)' != '' AND Exists('$(UserModsPath)')">
+    <PropertyGroup>
+      <ModOutputDir>$(UserModsPath)\$(ModFolderName)</ModOutputDir>
+    </PropertyGroup>
+    <MakeDir Directories="$(ModOutputDir)" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(ModOutputDir)" />
+    <Message Text="Copied $(TargetFileName) to $(ModOutputDir)" Importance="High" />
+  </Target>
+</Project>

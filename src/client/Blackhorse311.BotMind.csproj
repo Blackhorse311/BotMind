@@ -1,0 +1,106 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <RootNamespace>Blackhorse311.BotMind</RootNamespace>
+    <AssemblyName>Blackhorse311.BotMind</AssemblyName>
+    <Nullable>disable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <Authors>Blackhorse311</Authors>
+    <Copyright>Copyright © 2026 Blackhorse311</Copyright>
+    <Description>Combined bot AI enhancement mod for SPT - Looting, Questing, and MedicBuddy features</Description>
+    <AssemblyVersion>1.0.0</AssemblyVersion>
+    <FileVersion>$(AssemblyVersion)</FileVersion>
+    <Version>$(AssemblyVersion)</Version>
+  </PropertyGroup>
+
+  <!-- BepInEx and SPT References (from SPT installation) -->
+  <ItemGroup Condition="'$(SptPath)' != ''">
+    <!-- BepInEx Core -->
+    <Reference Include="BepInEx">
+      <HintPath>$(BepInExPath)\core\BepInEx.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="0Harmony">
+      <HintPath>$(BepInExPath)\core\0Harmony.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
+    <!-- SPT Plugins -->
+    <Reference Include="spt-common">
+      <HintPath>$(SptPluginsPath)\spt-common.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="spt-reflection">
+      <HintPath>$(SptPluginsPath)\spt-reflection.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
+    <!-- EFT Game Assemblies -->
+    <Reference Include="Assembly-CSharp">
+      <HintPath>$(ManagedPath)\Assembly-CSharp.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Comfort">
+      <HintPath>$(ManagedPath)\Comfort.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Comfort.Unity">
+      <HintPath>$(ManagedPath)\Comfort.Unity.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
+    <!-- Unity Modules -->
+    <Reference Include="UnityEngine">
+      <HintPath>$(ManagedPath)\UnityEngine.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(ManagedPath)\UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.AIModule">
+      <HintPath>$(ManagedPath)\UnityEngine.AIModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.PhysicsModule">
+      <HintPath>$(ManagedPath)\UnityEngine.PhysicsModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.IMGUIModule">
+      <HintPath>$(ManagedPath)\UnityEngine.IMGUIModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.InputLegacyModule">
+      <HintPath>$(ManagedPath)\UnityEngine.InputLegacyModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
+    <!-- DissonanceVoip (required for Player type used by BotsGroup.AddAlly) -->
+    <Reference Include="DissonanceVoip">
+      <HintPath>$(ManagedPath)\DissonanceVoip.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
+    <!-- Third-party dependencies (BigBrain, SAIN) -->
+    <Reference Include="DrakiaXYZ-BigBrain">
+      <HintPath>$(ThirdPartyPluginsPath)\DrakiaXYZ-BigBrain.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="SAIN">
+      <HintPath>$(ThirdPartyPluginsPath)\SAIN\SAIN.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!-- Post-build: Copy to BepInEx plugins folder -->
+  <Target Name="CopyToPlugins" AfterTargets="Build" Condition="'$(SptPath)' != '' AND Exists('$(BepInExPath)\plugins')">
+    <PropertyGroup>
+      <PluginOutputDir>$(BepInExPath)\plugins\$(ModFolderName)</PluginOutputDir>
+    </PropertyGroup>
+    <MakeDir Directories="$(PluginOutputDir)" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(PluginOutputDir)" />
+    <Message Text="Copied $(TargetFileName) to $(PluginOutputDir)" Importance="High" />
+  </Target>
+
+</Project>

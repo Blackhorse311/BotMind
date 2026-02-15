@@ -1,0 +1,56 @@
+<Project>
+  <!--
+    Shared build properties for BotMind mod projects.
+
+    SPT_PATH Configuration (in priority order):
+    ============================================
+    1. MSBuild property:     dotnet build -p:SptPath="H:\SPT"
+    2. Local user file:      Create src/Directory.Build.props.user (see .user.example)
+    3. Environment variable: Set SPT_PATH environment variable
+
+    Quick Setup (Recommended):
+      Copy Directory.Build.props.user.example to Directory.Build.props.user
+      and change the path to your SPT installation folder.
+
+    Environment Variable Setup:
+      Windows (PowerShell):   $env:SPT_PATH = "H:\SPT"
+      Windows (Permanent):    System Properties > Advanced > Environment Variables
+                              Add User variable: SPT_PATH = your\spt\path
+
+    If SPT_PATH is not set, the build will still succeed but:
+    - Reference DLLs will not be found (CS0246 errors for EFT/BepInEx types)
+    - Post-build copy steps will be skipped
+
+    For CI/GitHub Actions:
+    - References are resolved via NuGet packages (server mod)
+    - Client mod references require SPT_PATH or local .user file
+    - Post-build copy steps are skipped when SPT_PATH doesn't exist
+  -->
+
+  <!-- Import local user overrides if present (gitignored) -->
+  <Import Project="Directory.Build.props.user" Condition="Exists('Directory.Build.props.user')" />
+
+  <PropertyGroup>
+    <!--
+      Resolution order for SptPath:
+      1. Already set via -p:SptPath=... or .user file import above
+      2. SPT_PATH environment variable
+    -->
+    <SptPath Condition="'$(SptPath)' == ''">$(SPT_PATH)</SptPath>
+
+    <!-- Common paths derived from SPT installation -->
+    <BepInExPath Condition="'$(SptPath)' != ''">$(SptPath)\BepInEx</BepInExPath>
+    <ManagedPath Condition="'$(SptPath)' != ''">$(SptPath)\EscapeFromTarkov_Data\Managed</ManagedPath>
+    <SptPluginsPath Condition="'$(SptPath)' != ''">$(SptPath)\BepInEx\plugins\spt</SptPluginsPath>
+    <UserModsPath Condition="'$(SptPath)' != ''">$(SptPath)\SPT\user\mods</UserModsPath>
+    <ThirdPartyPluginsPath Condition="'$(SptPath)' != ''">$(SptPath)\BepInEx\plugins</ThirdPartyPluginsPath>
+
+    <!-- Mod output folder name -->
+    <ModFolderName>Blackhorse311-BotMind</ModFolderName>
+  </PropertyGroup>
+
+  <!-- Warn if SptPath is not configured -->
+  <Target Name="WarnMissingSptPath" BeforeTargets="ResolveAssemblyReferences" Condition="'$(SptPath)' == ''">
+    <Warning Text="SPT_PATH is not configured. Create src/Directory.Build.props.user (see .user.example) or set the SPT_PATH environment variable. References to EFT/BepInEx assemblies will not resolve." />
+  </Target>
+</Project>

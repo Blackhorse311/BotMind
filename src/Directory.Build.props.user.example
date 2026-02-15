@@ -1,0 +1,19 @@
+<Project>
+  <!--
+    Local developer overrides for BotMind build.
+
+    Setup:
+      1. Copy this file to "Directory.Build.props.user" (same folder)
+      2. Change the SptPath value below to your SPT installation folder
+      3. The .user file is gitignored and won't be committed
+
+    Common SPT locations:
+      H:\SPT
+      C:\SPT
+      D:\Games\SPT
+      C:\Users\YourName\SPT
+  -->
+  <PropertyGroup>
+    <SptPath>H:\SPT</SptPath>
+  </PropertyGroup>
+</Project>

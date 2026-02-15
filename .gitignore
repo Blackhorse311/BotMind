@@ -1,0 +1,40 @@
+# Build outputs
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+
+# NuGet
+*.nupkg
+packages/
+
+# IDE
+.vs/
+.vscode/
+*.suo
+*.user
+!*.user.example
+*.userosscache
+*.sln.docstates
+
+# Local developer overrides (SPT path, etc.)
+Directory.Build.props.user
+
+# OS files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+
+# Rider
+.idea/
+*.sln.iml
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# Research / reference mods (third-party source, not our code)
+research/
+
+# Windows artifacts
+nul

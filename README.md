@@ -16,7 +16,7 @@ BotMind enhances bot AI with three modules: intelligent **looting**, objective-b
 ```
 Looting:     Bots scan area → Find valuable loot → Navigate → Pick up items
 Questing:    Bots get objectives → Navigate map → Explore → Extract
-MedicBuddy:  Press F10 → Team spawns → Medic heals you → Team retreats
+MedicBuddy:  Press LCtrl+LAlt+F10 → Team spawns → Medic heals you → Team retreats
 ```
 
 ---

@@ -69,7 +69,7 @@ MedicBuddy:  Press F10 → Team spawns → Medic heals you → Team retreats
 ### Default Behavior
 
 - **Looting** and **Questing** are active on all bots automatically
-- **MedicBuddy** is activated on-demand with **F10**
+- **MedicBuddy** is activated on-demand with **LCtrl+LAlt+F10**
 - All three modules can be individually toggled
 
 ### Configuration

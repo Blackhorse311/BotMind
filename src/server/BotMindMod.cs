@@ -11,7 +11,7 @@ namespace Blackhorse311.BotMind.Server;
 public record BotMindModMetadata : AbstractModMetadata
 {
     public override string ModGuid { get; init; } = "com.blackhorse311.botmind";
-    public override string Name { get; init; } = "BotMind";
+    public override string Name { get; init; } = "Blackhorse311-BotMind";
     public override string Author { get; init; } = "Blackhorse311";
     public override List<string>? Contributors { get; init; }
     public override SemanticVersioning.Version Version { get; init; } = new(1, 0, 0);

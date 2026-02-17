@@ -17,7 +17,7 @@ Summon a friendly medical team to your position for healing. A medic and shooter
 
 1. Requires **SPT 4.0.12** with **BigBrain 1.4.x** installed
 2. **SAIN 3.x** recommended (optional - enables combat awareness and extraction)
-3. Copy the `Blackhorse311-BotMind` folder to `BepInEx/plugins/`
+3. Extract the release zip directly into your SPT root folder (the zip contains the correct `BepInEx/plugins/` path structure)
 4. Launch SPT
 
 ## Usage
@@ -105,11 +105,58 @@ dotnet build src/client/Blackhorse311.BotMind.csproj
 dotnet test src/tests/Blackhorse311.BotMind.Tests.csproj
 ```
 
+## Changelog
+
+### v1.0.0 (2026-02-17)
+- Initial release for SPT 4.0.12
+- Looting module: corpse, container, and loose item looting with value-based prioritization
+- Questing module: objective management, navigation, exploration, extraction
+- MedicBuddy module: on-demand medical team with phased healing sequence
+  - Voice lines (60 lines, EN/RU) and toast notifications
+  - CCP rally point system (Y-key)
+  - Medic promotion on medic KIA
+  - Hostile bot detection and immediate despawn
+  - Medical items on bot corpses (lootable)
+  - Player forced prone during treatment
+- 82 unit tests, 9 code reviews (151 issues found, 149 fixed)
+
+## Security & Compliance
+
+Source code is available on [GitHub](https://github.com/Blackhorse311/BotMind) for independent verification and building.
+
+### Forge Compliance
+
+This mod meets all SPT Forge Content Guidelines and Community Standards.
+
+- MIT licensed, fully open source
+- Zero network activity (fully offline)
+- No obfuscation, no data collection
+- Comprehensive error handling throughout
+- Operational-only logging (no ASCII art, no credits, no links)
+- Comprehensive documentation
+
 ## License
 
 [MIT](LICENSE)
 
 ## Credits
 
-- **Blackhorse311** - Author
-- Built for the [SPT](https://www.sp-tarkov.com/) community
+**Author:** Blackhorse311
+
+### Human + AI Collaboration
+
+BotMind v1.0.0 was developed through a collaboration between Blackhorse311 and Claude, an AI assistant created by Anthropic. This partnership brought together human creativity, game testing, and design direction with AI-assisted code implementation, architecture design, and quality assurance.
+
+Together, we delivered:
+- 3 feature modules (Looting, Questing, MedicBuddy)
+- 82 unit tests with full coverage
+- 9 code reviews with 149 fixes
+- 3 successful runtime tests
+- Comprehensive documentation and architecture decision records
+
+### Thanks to:
+- **SPT Team** - For the amazing SPT project
+- **BepInEx Team** - For the modding framework
+- **DrakiaXYZ** - For BigBrain AI framework
+- **Solarint** - For SAIN combat AI
+- **Anthropic** - For creating Claude

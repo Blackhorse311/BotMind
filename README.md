@@ -86,12 +86,12 @@ Config file location: `BepInEx/config/com.blackhorse311.botmind.cfg`
 
 | Key | Action |
 |-----|--------|
-| **F10** | Summon medical team |
+| **LCtrl+LAlt+F10** | Summon medical team |
 | **Y** | Set Casualty Collection Point (CCP) at your position |
 
 ### How It Works
 
-1. Press **F10** to summon the medical team
+1. Press **LCtrl+LAlt+F10** to summon the medical team
 2. A medic and shooter escorts spawn behind you and navigate to your position
 3. Press **Y** to set a CCP rally point where you want treatment
 4. The team establishes a defensive perimeter around the CCP
@@ -109,6 +109,7 @@ Config file location: `BepInEx/config/com.blackhorse311.botmind.cfg`
 - If a team bot becomes hostile (e.g., due to another mod's teamkill mechanic), it is immediately despawned for your safety.
 - If the medic is killed, a surviving shooter is automatically promoted to medic.
 - Team bots carry medical items (IFAK, CMS, bandages) that you can loot from their corpses.
+- You must be injured and have no medical equipment to call the medical team. They will not respond if you have gear, or are not injured. 
 
 ---
 
@@ -146,7 +147,7 @@ Access mod settings via **F12** (BepInEx Configuration Manager) or edit the conf
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| Summon Keybind | F10 | Key to summon the medical team |
+| Summon Keybind | LCtrl+LAlt+F10 | Key to summon the medical team |
 | Cooldown | 300s | Seconds between summons |
 | Team Size | 4 | Number of bots in the team (2-6) |
 | PMC Raids Only | true | Only available in PMC raids |
@@ -168,7 +169,7 @@ Access mod settings via **F12** (BepInEx Configuration Manager) or edit the conf
 
 | Problem | Solution |
 |---------|----------|
-| MedicBuddy not responding to F10 | Check mod is enabled in F12 settings. Verify PMC-only setting if playing as Scav. |
+| MedicBuddy not responding to LCtrl+LAlt+F10 | Check mod is enabled in F12 settings. Verify PMC-only setting if playing as Scav. |
 | Medic getting stuck | Move to an open area and press **Y** to set a new CCP. |
 | Team bots not spawning | Check BepInEx console for errors. Ensure BigBrain is installed. |
 | Bots not looting | Verify looting is enabled. Check search radius and minimum value settings. |

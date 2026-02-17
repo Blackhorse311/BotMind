@@ -105,6 +105,24 @@ dotnet build src/client/Blackhorse311.BotMind.csproj
 dotnet test src/tests/Blackhorse311.BotMind.Tests.csproj
 ```
 
+## Support
+
+### Bug Reports
+
+Please use our [GitHub Issue Tracker](https://github.com/Blackhorse311/BotMind/issues) with the bug report template. Include:
+
+- SPT and mod versions
+- Which module is affected (MedicBuddy, Looting, Questing)
+- Steps to reproduce
+- Client log: `BepInEx/LogOutput.log`
+- Server log: `SPT/user/logs/`
+
+**Tip:** Search for "BotMind" or "Blackhorse311" in your logs to find relevant lines.
+
+### Feature Requests
+
+Have an idea? [Open a feature request](https://github.com/Blackhorse311/BotMind/issues/new?template=feature_request.yml) on GitHub.
+
 ## Changelog
 
 ### v1.0.0 (2026-02-17)

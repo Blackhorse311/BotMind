@@ -75,6 +75,18 @@
       <HintPath>$(ManagedPath)\UnityEngine.InputLegacyModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Reference Include="UnityEngine.AudioModule">
+      <HintPath>$(ManagedPath)\UnityEngine.AudioModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UnityWebRequestModule">
+      <HintPath>$(ManagedPath)\UnityEngine.UnityWebRequestModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UnityWebRequestAudioModule">
+      <HintPath>$(ManagedPath)\UnityEngine.UnityWebRequestAudioModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
 
     <!-- DissonanceVoip (required for Player type used by BotsGroup.AddAlly) -->
     <Reference Include="DissonanceVoip">
@@ -97,10 +109,21 @@
   <Target Name="CopyToPlugins" AfterTargets="Build" Condition="'$(SptPath)' != '' AND Exists('$(BepInExPath)\plugins')">
     <PropertyGroup>
       <PluginOutputDir>$(BepInExPath)\plugins\$(ModFolderName)</PluginOutputDir>
+      <VoicelinesSource>$(MSBuildThisFileDirectory)..\..\content\voicelines</VoicelinesSource>
     </PropertyGroup>
     <MakeDir Directories="$(PluginOutputDir)" />
     <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(PluginOutputDir)" />
     <Message Text="Copied $(TargetFileName) to $(PluginOutputDir)" Importance="High" />
+    <!-- Copy voicelines to plugins folder (preserving en/ru subfolder structure) -->
+    <ItemGroup>
+      <VoicelineFiles Include="$(VoicelinesSource)\**\*.ogg" />
+    </ItemGroup>
+    <Copy SourceFiles="@(VoicelineFiles)"
+          DestinationFiles="@(VoicelineFiles->'$(PluginOutputDir)\voicelines\%(RecursiveDir)%(Filename)%(Extension)')"
+          Condition="@(VoicelineFiles) != ''" />
+    <Message Text="Copied @(VoicelineFiles->Count()) voice line(s) to $(PluginOutputDir)\voicelines\"
+             Importance="High"
+             Condition="@(VoicelineFiles) != ''" />
   </Target>
 
 </Project>

@@ -238,7 +238,7 @@ All modules must integrate with SAIN:
 
 ## Implementation Status
 
-**Last Updated:** 2026-02-15
+**Last Updated:** 2026-02-17
 
 | Feature | Status | Notes |
 |---------|--------|-------|
@@ -254,27 +254,71 @@ All modules must integrate with SAIN:
 | Extraction | **COMPLETE** | ExtractLogic.cs with SAIN integration |
 | MedicBuddy Controller | **COMPLETE** | Full state machine with 7 phases |
 | Bot Spawning | **COMPLETE** | BotSpawner integration with friendly assignment |
-| Healing Interaction | **COMPLETE** | Player health restoration via ActiveHealthController |
+| Inter-Team Friendship | **COMPLETE** | MakeTeamBotsFriendly() + FinalizeTeamFriendship() cross-links all BotsGroups |
+| Healing Interaction | **COMPLETE** | Comprehensive: HP, bleeds, fractures, destroyed limbs via ActiveHealthController |
 | Hostile Bot Detection | **COMPLETE** | CheckTeamHostility() detects and despawns hostile team bots |
+| CCP Rally Point | **COMPLETE** | Y-key sets Casualty Collection Point; bots converge on fixed position |
+| Medic Promotion | **COMPLETE** | TryPromoteMedic() promotes surviving shooter when medic KIA |
+| Pre-Summon Validation | **COMPLETE** | Health check, medical supplies check, PMC-only check with notifications |
+| Medical Gear on Bots | **IN PROGRESS** | EquipBotWithMedicalGear() implemented but silently failing - see known issues |
+| Voice Lines + Notifications | **COMPLETE** | MedicBuddyNotifier (EN/RU) + MedicBuddyAudio with 60 voice lines |
 | Unit Tests | **COMPLETE** | 82 passing tests covering all modules |
 
 ### Code Review Status
 
-The codebase has undergone 8 comprehensive code reviews:
-- 140 issues identified
-- 138 issues fixed
+The codebase has undergone 9 comprehensive code reviews:
+- 151 issues identified
+- 149 issues fixed
 - 2 issues skipped (by design)
 
 See `docs/CODE_REVIEW_FIXES.md` for complete review history.
 
 ---
 
+## Known Issues (As of 2026-02-17)
+
+### Medical Gear Not Appearing on Bot Corpses
+- `EquipBotWithMedicalGear()` is implemented and builds clean, but runtime test showed NO "Equipped X medical items" success log messages
+- All error paths were logging at `LogDebug` (hidden). Fixed in Review 9 to use `LogWarning`
+- **Next step:** Re-run in SPT and check logs for the specific failure reason
+- Likely causes: `ItemFactoryClass` not available at bot creation time, inventory not yet initialized, or `FindGridToPickUp()` finds no space
+
+### Remaining Warning-Level Issues Not Yet Fixed
+- **W10:** `FollowTeamLogic` retreat target might not be on NavMesh (low risk - NavMesh.SamplePosition fallback exists)
+- **W3:** Audio cleanup doesn't stop playing audio (cosmetic - audio is short, self-terminates)
+- **W4:** Promoted medic may not properly transition between BigBrain layers (needs runtime verification)
+- **W5:** `_effectsCleared` reset on medic promotion could re-clear effects (harmless - re-clearing is idempotent)
+
+---
+
+## Runtime Test Results (2026-02-17)
+
+### First Successful Runtime Test
+- **Environment:** SPT 4.0.12
+- **Result:** MedicBuddy feature works end-to-end
+- **Details:**
+  - Summon keybind detected correctly
+  - 4 bots spawned (1 medic + 3 shooters), all captured successfully
+  - BigBrain layers attached and activated for all bots
+  - Bots navigated to player (2 arrived normally, 2 timed out and were teleported)
+  - CCP rally point set and acknowledged
+  - Healing completed: negative effects cleared, player fully healed
+  - Clean retreat and despawn
+  - No GoToPoint NRE spam (EBotState.Active check works)
+  - No inter-team hostility (friendship cross-linking works)
+- **Issues Found:**
+  - Medical gear equip silently failing (fixed error visibility in Review 9)
+  - Movement timeout hit for 2 bots (teleport fallback worked correctly)
+
+---
+
 ## Next Steps
 
-1. **Runtime Testing** - Test in actual SPT 4.0.12 environment
-2. **SAIN Compatibility Testing** - Verify SAIN interop works correctly
-3. **Performance Profiling** - Measure actual per-frame overhead
-4. **User Configuration Testing** - Verify BepInEx config options work
-5. **Edge Case Testing** - Test mid-raid spawns, multiple bots, etc.
-6. **Third-Party Mod Compatibility** - Verified compatible with SameSideIsFriendly v2.0.0
+1. **Fix Medical Gear** - Re-run in SPT to see why EquipBotWithMedicalGear fails (now with visible warnings)
+2. **Second Runtime Test** - Verify 9th review fixes work in-game
+3. **Looting/Questing Runtime Test** - Test the other two modules in actual gameplay
+4. **SAIN Compatibility Testing** - Verify SAIN interop works correctly
+5. **Performance Profiling** - Measure actual per-frame overhead
+6. **Edge Case Testing** - Multiple summons, mid-raid spawns, player death during healing
+7. **Packaging** - LICENSE, README.md, distribution zip for SPT Forge
 

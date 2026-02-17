@@ -1,5 +1,6 @@
 using BepInEx.Configuration;
 using System;
+using UnityEngine;
 
 namespace Blackhorse311.BotMind.Configuration
 {
@@ -87,10 +88,10 @@ namespace Blackhorse311.BotMind.Configuration
         #region MedicBuddy Settings
 
         /// <summary>
-        /// Keyboard key to summon the medical team.
-        /// Must be a valid UnityEngine.KeyCode name (e.g., "F10", "Home").
+        /// Key combination to summon the medical team.
+        /// Default is Ctrl+Alt+F10. Supports modifier keys via BepInEx KeyboardShortcut.
         /// </summary>
-        public static ConfigEntry<string> MedicBuddyKeybind { get; private set; }
+        public static ConfigEntry<KeyboardShortcut> MedicBuddyKeybind { get; private set; }
 
         /// <summary>
         /// Cooldown duration (in seconds) between MedicBuddy summons.
@@ -109,6 +110,25 @@ namespace Blackhorse311.BotMind.Configuration
         /// When true, Scav runs cannot summon the medical team.
         /// </summary>
         public static ConfigEntry<bool> MedicBuddyPMCOnly { get; private set; }
+
+        /// <summary>
+        /// Key to set a Casualty Collection Point (rally point) for the medical team.
+        /// When pressed during an active MedicBuddy mission, all bots converge on the
+        /// player's current position instead of tracking the moving player.
+        /// </summary>
+        public static ConfigEntry<KeyboardShortcut> MedicBuddyRallyKeybind { get; private set; }
+
+        /// <summary>
+        /// Enable voice line audio playback during MedicBuddy events.
+        /// Requires .ogg files in the voicelines/ subfolder.
+        /// Text notifications always display regardless of this setting.
+        /// </summary>
+        public static ConfigEntry<bool> MedicBuddyEnableVoice { get; private set; }
+
+        /// <summary>
+        /// Volume for MedicBuddy voice line audio (0-100).
+        /// </summary>
+        public static ConfigEntry<int> MedicBuddyVoiceVolume { get; private set; }
 
         #endregion
 
@@ -206,8 +226,8 @@ namespace Blackhorse311.BotMind.Configuration
             MedicBuddyKeybind = config.Bind(
                 "4. MedicBuddy",
                 "Summon Keybind",
-                "F10",
-                "Key to summon the medical team");
+                new KeyboardShortcut(KeyCode.F10, KeyCode.LeftControl, KeyCode.LeftAlt),
+                "Key combination to summon the medical team (default: Ctrl+Alt+F10)");
 
             MedicBuddyCooldown = config.Bind(
                 "4. MedicBuddy",
@@ -230,6 +250,27 @@ namespace Blackhorse311.BotMind.Configuration
                 "PMC Raids Only",
                 true,
                 "Only allow MedicBuddy in PMC raids (not Scav runs)");
+
+            MedicBuddyRallyKeybind = config.Bind(
+                "4. MedicBuddy",
+                "Rally Point Keybind",
+                new KeyboardShortcut(KeyCode.Y),
+                "Key to set a Casualty Collection Point (rally point) during an active MedicBuddy mission. " +
+                "Team will converge on your position when pressed.");
+
+            MedicBuddyEnableVoice = config.Bind(
+                "4. MedicBuddy",
+                "Enable Voice Lines",
+                true,
+                "Play voice line audio during MedicBuddy events (requires .ogg files in voicelines/ folder)");
+
+            MedicBuddyVoiceVolume = config.Bind(
+                "4. MedicBuddy",
+                "Voice Volume",
+                80,
+                new ConfigDescription(
+                    "Volume for MedicBuddy voice lines (0-100)",
+                    new AcceptableValueRange<int>(0, 100)));
         }
     }
 }

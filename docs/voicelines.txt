@@ -1,0 +1,128 @@
+MedicBuddy Voice Lines - Eleven Labs Recording Guide
+=====================================================
+
+File format: .ogg
+Destination: BepInEx/plugins/Blackhorse311-BotMind/voicelines/
+
+Voice lines are split by faction:
+  - USEC -> English (voicelines/en/)
+  - BEAR -> Russian (voicelines/ru/)
+  - Scav -> Russian (voicelines/ru/)
+
+
+========================================================
+ENGLISH VOICE LINES (USEC)
+Folder: voicelines/en/
+========================================================
+
+SUMMON REQUEST (player just called for help)
+--------------------------------------------
+summon_request_1.ogg  ->  "Help requested! Stand by..."
+summon_request_2.ogg  ->  "Calling it in! MedicBuddy en route."
+summon_request_3.ogg  ->  "Signal sent! Help is being dispatched."
+summon_request_4.ogg  ->  "Copy that! Medical team is spinning up."
+summon_request_5.ogg  ->  "Distress call received. Hang tight!"
+
+
+TEAM EN ROUTE (team spawned, moving to player)
+-----------------------------------------------
+team_enroute_1.ogg  ->  "Help is on the way!"
+team_enroute_2.ogg  ->  "Team deployed! Moving to your position."
+team_enroute_3.ogg  ->  "Medical team inbound. Hold your position."
+team_enroute_4.ogg  ->  "We've got your location. Moving in."
+team_enroute_5.ogg  ->  "Boots on the ground! Heading to you now."
+
+
+TEAM ARRIVED (team reached the player, securing area)
+------------------------------------------------------
+team_arrived_1.ogg  ->  "We're here! Securing the area."
+team_arrived_2.ogg  ->  "On site! Setting up a perimeter."
+team_arrived_3.ogg  ->  "Team in position. You're covered."
+team_arrived_4.ogg  ->  "Area secured. Ready to treat."
+team_arrived_5.ogg  ->  "We've arrived. Locking down the area."
+
+
+HEALING START (medic begins treating the player)
+-------------------------------------------------
+healing_start_1.ogg  ->  "Hold still, I've got you."
+healing_start_2.ogg  ->  "Let me take a look... I've seen worse."
+healing_start_3.ogg  ->  "Easy now. I'll have you patched up in no time."
+healing_start_4.ogg  ->  "Sit tight, I'm working on it."
+healing_start_5.ogg  ->  "You're gonna be alright. Hold still for me."
+
+
+HEALING COMPLETE (player is patched up)
+----------------------------------------
+healing_complete_1.ogg  ->  "There you go! You're all patched up. Get back in the fight!"
+healing_complete_2.ogg  ->  "Good AS new!! Well......close enough I 'spect! You're clear!"
+healing_complete_3.ogg  ->  "All done! You're combat ready. Go get 'em."
+healing_complete_4.ogg  ->  "That's the last of it. You're good to go!"
+healing_complete_5.ogg  ->  "Patched up and ready to roll. Stay safe out there!"
+
+
+TEAM EXFIL (team is leaving)
+------------------------------
+team_exfil_1.ogg  ->  "We're pulling out. Stay safe!"
+team_exfil_2.ogg  ->  "Mission complete. Team is exfilling."
+team_exfil_3.ogg  ->  "Our work here is done. Good luck out there!"
+team_exfil_4.ogg  ->  "Pulling back. You've got this from here."
+team_exfil_5.ogg  ->  "Team moving out. Give 'em hell!"
+
+
+========================================================
+RUSSIAN VOICE LINES (BEAR / Scav) - Informal military speech
+Folder: voicelines/ru/
+========================================================
+
+SUMMON REQUEST (player just called for help)
+--------------------------------------------
+summon_request_1.ogg  ->  "Запрос принял. Жди."
+summon_request_2.ogg  ->  "Вызов принят! Группа на выходе."
+summon_request_3.ogg  ->  "Сигнал есть. Высылаю помощь."
+summon_request_4.ogg  ->  "Принял! Медики собираются."
+summon_request_5.ogg  ->  "Приняли сигнал. Держись, брат."
+
+
+TEAM EN ROUTE (team spawned, moving to player)
+-----------------------------------------------
+team_enroute_1.ogg  ->  "Идём к тебе!"
+team_enroute_2.ogg  ->  "Группа на марше. Твоя точка есть."
+team_enroute_3.ogg  ->  "Медики на подходе. Держи позицию."
+team_enroute_4.ogg  ->  "Твоя точка есть. Заходим."
+team_enroute_5.ogg  ->  "Выдвинулись! Скоро будем."
+
+
+TEAM ARRIVED (team reached the player, securing area)
+------------------------------------------------------
+team_arrived_1.ogg  ->  "На месте. Работаем периметр."
+team_arrived_2.ogg  ->  "Пришли. Ставим охранение."
+team_arrived_3.ogg  ->  "Группа на точке. Прикрываем."
+team_arrived_4.ogg  ->  "Чисто. Готовы работать."
+team_arrived_5.ogg  ->  "Заняли позиции. Ты в безопасности."
+
+
+HEALING START (medic begins treating the player)
+-------------------------------------------------
+healing_start_1.ogg  ->  "Не дёргайся. Сейчас починю."
+healing_start_2.ogg  ->  "Дай гляну... Видал и хуже."
+healing_start_3.ogg  ->  "Тихо. Работаю."
+healing_start_4.ogg  ->  "Сиди. Сейчас подлатаю."
+healing_start_5.ogg  ->  "Нормально будет. Не двигайся."
+
+
+HEALING COMPLETE (player is patched up)
+----------------------------------------
+healing_complete_1.ogg  ->  "Готов. Залатал. Давай в бой."
+healing_complete_2.ogg  ->  "Ну всё, гопник! Починил тебя! Хватай семечки, водку, и покажи им что такое хард-басс! Чики-брики и в дамки!"
+healing_complete_3.ogg  ->  "Всё. Боеспособен. Вперёд."
+healing_complete_4.ogg  ->  "Последнее. Ты в норме."
+healing_complete_5.ogg  ->  "Починил. Береги себя, брат."
+
+
+TEAM EXFIL (team is leaving)
+------------------------------
+team_exfil_1.ogg  ->  "Отходим. Удачи, брат."
+team_exfil_2.ogg  ->  "Задачу выполнили. Уходим."
+team_exfil_3.ogg  ->  "Работа сделана. Бывай."
+team_exfil_4.ogg  ->  "Отход. Дальше сам."
+team_exfil_5.ogg  ->  "Сваливаем. Дай им жару!"

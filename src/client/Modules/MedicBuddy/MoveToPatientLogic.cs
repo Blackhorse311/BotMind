@@ -31,7 +31,7 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
                 _startTime = Time.time;
                 _nextMoveTime = 0f;
                 _arrived = false;
-                BotMindPlugin.Log?.LogDebug($"[{BotOwner?.name ?? "Unknown"}] MoveToPatientLogic started");
+                BotMindPlugin.Log?.LogInfo($"[{BotOwner?.name ?? "Unknown"}] MoveToPatientLogic started");
             }
             catch (Exception ex)
             {
@@ -67,22 +67,24 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
                     return;
                 }
 
-                float distanceToPlayer = Vector3.Distance(BotOwner.Position, player.Position);
+                // Navigate to rally point (CCP) if set, otherwise to the player
+                Vector3 targetPos = controller.RallyPoint;
+                float distanceToTarget = Vector3.Distance(BotOwner.Position, targetPos);
 
                 // Check if arrived
-                if (distanceToPlayer <= ARRIVAL_DISTANCE)
+                if (distanceToTarget <= ARRIVAL_DISTANCE)
                 {
                     _arrived = true;
                     BotOwner.SetPose(0.5f); // Semi-crouch when arrived
-                    BotOwner.Steering.LookToPoint(player.Position + Vector3.up * 1.5f);
+                    BotOwner.Steering.LookToPoint(targetPos + Vector3.up * 1.5f);
                     return;
                 }
 
                 _arrived = false;
 
-                // Movement settings
+                // Movement settings - sprint when far away
                 BotOwner.SetPose(1f);
-                BotOwner.SetTargetMoveSpeed(distanceToPlayer > 20f ? 1f : 0.7f);
+                BotOwner.SetTargetMoveSpeed(distanceToTarget > 20f ? 1f : 0.7f);
                 BotOwner.Steering.LookToMovingDirection();
 
                 // Update path periodically
@@ -90,8 +92,8 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
                 {
                     _nextMoveTime = Time.time + MOVE_UPDATE_INTERVAL;
 
-                    // Calculate destination near player
-                    Vector3 destination = player.Position;
+                    // Calculate destination (rally point or player position)
+                    Vector3 destination = targetPos;
 
                     // Try to find NavMesh-valid position
                     if (NavMesh.SamplePosition(destination, out NavMeshHit hit, 5f, NavMesh.AllAreas))
@@ -113,12 +115,14 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
 
         public override void BuildDebugText(StringBuilder stringBuilder)
         {
-            var player = MedicBuddyController.Instance?.TargetPlayer;
-            float distance = player != null ? Vector3.Distance(BotOwner.Position, player.Position) : 0f;
+            var controller = MedicBuddyController.Instance;
+            var targetPos = controller?.RallyPoint ?? Vector3.zero;
+            float distance = Vector3.Distance(BotOwner.Position, targetPos);
 
             stringBuilder.AppendLine("MoveToPatientLogic");
             stringBuilder.AppendLine($"  Arrived: {_arrived}");
             stringBuilder.AppendLine($"  Distance: {distance:F1}m");
+            stringBuilder.AppendLine($"  Target: {targetPos}");
             stringBuilder.AppendLine($"  Duration: {Time.time - _startTime:F1}s");
         }
     }

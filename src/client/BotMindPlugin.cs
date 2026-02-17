@@ -45,19 +45,22 @@ namespace Blackhorse311.BotMind
         private GameWorldDisposePatch _gameWorldDisposePatch;
 
         // Brain names for different bot types
+        // CRITICAL: These must match BaseBrain.ShortName() return values exactly (case-sensitive)
+        // PmcUsec/PmcBear are the actual brain names for PMC bots (matches EBrain enum ToString())
         private static readonly List<string> AllBrains = new List<string>
         {
-            "Assault", "PMC", "ExUsec", "Obdolbs", "CursAssault",
-            "BossTest", "Follower", "Knight", "BigPipe", "BirdEye",
+            "Assault", "PMC", "ExUsec", "PmcUsec", "PmcBear", "Obdolbs", "CursAssault",
+            "BossTest", "Knight", "BigPipe", "BirdEye",
             "FollowerGluharAssault", "FollowerGluharProtect", "FollowerGluharScout",
             "Tagilla", "Killa", "BossBully", "FollowerBully",
             "BossSanitar", "FollowerSanitar", "BossKojaniy", "FollowerKojaniy",
-            "SectantPriest", "SectantWarrior", "Gifter", "Marksman"
+            "SectantPriest", "SectantWarrior", "Gifter", "Marksman",
+            "ArenaFighter"
         };
 
         private static readonly List<string> PMCBrains = new List<string>
         {
-            "PMC", "ExUsec"
+            "PMC", "ExUsec", "PmcUsec", "PmcBear"
         };
 
         private static readonly List<string> ScavBrains = new List<string>
@@ -202,6 +205,9 @@ namespace Blackhorse311.BotMind
             {
                 Log.LogDebug("GameWorld destroyed - cleaning up BotMind modules");
 
+                // Clean up audio clips before destroying controller
+                MedicBuddyAudio.Cleanup();
+
                 if (_medicBuddyController != null)
                 {
                     Destroy(_medicBuddyController);
@@ -232,6 +238,9 @@ namespace Blackhorse311.BotMind
             {
                 _medicBuddyController.SetPlayer(mainPlayer);
             }
+
+            // Initialize audio system (loads voice lines from voicelines/ subfolder)
+            MedicBuddyAudio.Initialize(_medicBuddyController);
 
             Log.LogInfo("MedicBuddy controller initialized");
         }

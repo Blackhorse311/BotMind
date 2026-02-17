@@ -135,8 +135,10 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
 
         private void UpdateLookDirection(Player player)
         {
-            // Face outward from player (watch for threats)
-            Vector3 outwardDir = (BotOwner.Position - player.Position).normalized;
+            // Face outward from rally point/player (watch for threats)
+            var controller = MedicBuddyController.Instance;
+            Vector3 center = controller?.RallyPoint ?? player.Position;
+            Vector3 outwardDir = (BotOwner.Position - center).normalized;
 
             // Seventh Review Fix (Issue 13): Use named constant instead of magic number
             if (outwardDir.sqrMagnitude < MIN_DIRECTION_SQR_MAGNITUDE)

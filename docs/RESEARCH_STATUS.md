@@ -260,7 +260,7 @@ Some 4.0.7 extracts should be refreshed to 4.0.11 to catch any API changes:
 - [x] All navigation logic using BotOwner.GoToPoint()
 - [x] NavMesh validation for all movement targets
 
-### Module Status (Updated 2026-02-15)
+### Module Status (Updated 2026-02-17)
 
 #### Looting Module: COMPLETE
 - LootingLayer.cs - Layer management with loot priority
@@ -279,17 +279,19 @@ Some 4.0.7 extracts should be refreshed to 4.0.11 to catch any API changes:
 - PlaceItemLogic.cs - Item placement at quest locations
 
 #### MedicBuddy Module: COMPLETE
-- MedicBuddyController.cs - Team spawning, state machine, healing, hostile bot detection
-- MedicBuddyMedicLayer.cs - Medic bot AI layer
+- MedicBuddyController.cs - Team spawning, state machine, healing, hostile bot detection, medical gear equip
+- MedicBuddyMedicLayer.cs - Medic bot AI layer (uses RallyPoint for distance check)
 - MedicBuddyShooterLayer.cs - Shooter bot AI layer
-- MoveToPatientLogic.cs - Navigation to player
+- MedicBuddyNotifier.cs - Toast notifications with EN/RU variants (5 per event)
+- MedicBuddyAudio.cs - Voice line playback (60 voice lines)
+- MoveToPatientLogic.cs - Navigation to player/rally point
 - HealPatientLogic.cs - Healing behavior coordination
-- DefendPerimeterLogic.cs - Defensive positioning
+- DefendPerimeterLogic.cs - Defensive positioning around rally point
 - FollowTeamLogic.cs - Retreat behavior
 
 ### Testing Status
 
-**Build Status:** All modules compile successfully against SPT 4.0.12 (verified 2026-02-15)
+**Build Status:** All modules compile successfully against SPT 4.0.12 (verified 2026-02-17, 0 errors, 0 warnings)
 
 **Unit Tests:** 82 passing tests in `src/tests/`:
 - `Core/BlacklistTests.cs` - Thread-safe blacklist with stable IDs
@@ -307,10 +309,11 @@ Some 4.0.7 extracts should be refreshed to 4.0.11 to catch any API changes:
   - GameStartedPatch for module initialization
   - GameWorldDisposePatch for cleanup
 
-**Code Reviews:** 8 reviews completed, 140 issues found, 138 fixed
+**Code Reviews:** 9 reviews completed, 151 issues found, 149 fixed
 - See `docs/CODE_REVIEW_FIXES.md` for complete history
 
-**Runtime Testing:** Not yet completed - requires SPT 4.0.12 environment
+**Runtime Testing:** First successful MedicBuddy test completed 2026-02-17
+- See `docs/FEATURE_REQUIREMENTS.md` "Runtime Test Results" section for details
 
 ---
 
@@ -323,3 +326,26 @@ Some 4.0.7 extracts should be refreshed to 4.0.11 to catch any API changes:
 - Health restoration uses ActiveHealthController.ChangeHealth()
 - SPT 4.0.12 compatibility verified: all EFT APIs unchanged from 4.0.11, server NuGet packages updated
 - SameSideIsFriendly v2.0.0 compatibility verified: no patch conflicts, CheckTeamHostility handles edge cases
+
+### EFT Inventory Item Creation API (Discovered 2026-02-17)
+
+For adding items to bot inventories at runtime:
+
+```csharp
+// Create item from template ID
+Item item = Singleton<ItemFactoryClass>.Instance.CreateItem(MongoID.Generate(), templateId, null);
+
+// Find inventory space (checks vest, pockets, backpack)
+ItemAddress location = inventoryController.FindGridToPickUp(item);
+
+// Move item into inventory
+var moveResult = InteractionsHandlerClass.Move(item, location, inventoryController, true);
+if (moveResult.Succeeded)
+{
+    inventoryController.RunNetworkTransaction(moveResult.Value, null);
+}
+```
+
+Source: `pitvenin-friendlypmc` mod (`research/mods/pitvenin-friendlypmc-e1f5e8c2b463/client/Actions/FollowerTakeLoot.cs`)
+
+**Known issue:** This may fail silently when called in `OnBotCreated` - the bot's inventory may not be fully initialized yet. Need to verify timing or add a delay.

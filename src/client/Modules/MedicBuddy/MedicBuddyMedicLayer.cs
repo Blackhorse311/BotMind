@@ -39,11 +39,20 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
             return "MedicBuddy_Medic";
         }
 
+        private bool _loggedFirstCheck;
+        private MedicBuddyController.MedicBuddyState _lastLoggedState;
+        private bool _wasActive;
         public override bool IsActive()
         {
             // Third Review Fix: Added try-catch to prevent crashes in framework callback
             try
             {
+                if (!_loggedFirstCheck)
+                {
+                    _loggedFirstCheck = true;
+                    BotMindPlugin.Log?.LogInfo($"[{BotOwner?.name}] MedicBuddyMedicLayer.IsActive first check (brain attached)");
+                }
+
                 _controller = MedicBuddyController.Instance;
                 if (_controller == null) return false;
 
@@ -53,10 +62,19 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
 
                 // Active when controller is in appropriate state
                 var controllerState = _controller.CurrentState;
-                return controllerState == MedicBuddyController.MedicBuddyState.MovingToPlayer ||
+                bool active = controllerState == MedicBuddyController.MedicBuddyState.MovingToPlayer ||
                        controllerState == MedicBuddyController.MedicBuddyState.Defending ||
                        controllerState == MedicBuddyController.MedicBuddyState.Healing ||
                        controllerState == MedicBuddyController.MedicBuddyState.Retreating;
+
+                // Only log on state changes to prevent per-frame spam
+                if (active && (!_wasActive || controllerState != _lastLoggedState))
+                {
+                    BotMindPlugin.Log?.LogInfo($"[{BotOwner?.name}] MedicBuddyMedicLayer.IsActive = TRUE (state={controllerState})");
+                    _lastLoggedState = controllerState;
+                }
+                _wasActive = active;
+                return active;
             }
             catch (Exception ex)
             {
@@ -106,17 +124,18 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
 
                 case MedicBuddyController.MedicBuddyState.Defending:
                 case MedicBuddyController.MedicBuddyState.Healing:
-                    // Check if arrived at player
+                    // Check if arrived at rally point (CCP if set, otherwise player position)
                     if (_moveLogic != null && _moveLogic.HasArrived)
                     {
                         _medicState = MedicState.Healing;
                     }
                     else
                     {
-                        var player = _controller.TargetPlayer;
-                        if (player != null)
+                        // Use RallyPoint instead of player.Position so CCP works correctly
+                        Vector3 rallyPoint = _controller.RallyPoint;
+                        if (rallyPoint != Vector3.zero)
                         {
-                            float dist = Vector3.Distance(BotOwner.Position, player.Position);
+                            float dist = Vector3.Distance(BotOwner.Position, rallyPoint);
                             _medicState = dist <= HEAL_RANGE ? MedicState.Healing : MedicState.MovingToPlayer;
                         }
                         else
@@ -168,7 +187,7 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
             // Seventh Review Fix (Issue 147): Add try-catch to framework callback
             try
             {
-                BotMindPlugin.Log?.LogDebug($"[{BotOwner?.name ?? "Unknown"}] MedicBuddyMedicLayer started");
+                BotMindPlugin.Log?.LogInfo($"[{BotOwner?.name ?? "Unknown"}] MedicBuddyMedicLayer activated");
                 _medicState = MedicState.MovingToPlayer;
             }
             catch (Exception ex)

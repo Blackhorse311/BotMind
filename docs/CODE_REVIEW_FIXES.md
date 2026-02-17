@@ -1285,3 +1285,139 @@ A bot spawning 30 minutes into raid thinks the raid just started. "Extract after
 The first seven reviews added ~2000 lines of error handling, logging, and "thread safety."
 
 The eighth review actually made the mod **do something useful**.
+
+---
+
+## Ninth Review - Post-Runtime Hardening (Issues 141-151)
+
+**Review Date:** 2026-02-17
+**Trigger:** First successful runtime test + comprehensive code scan
+**Review Method:** Log analysis + code-reviewer agent (6 critical, 10 warnings, 6 suggestions identified)
+
+### Context
+
+First runtime test of MedicBuddy was successful - all 4 bots spawned, layers attached, healing completed, clean retreat and despawn. However, log analysis revealed that the new `EquipBotWithMedicalGear` feature was **silently failing** (no success logs appeared), and a comprehensive code scan found additional edge cases.
+
+### Summary
+
+| Category | Issues Found | Fixed |
+|----------|--------------|-------|
+| Critical (Silent Failures) | 3 | 3 |
+| Critical (Thread Safety) | 1 | 1 |
+| Critical (Null Safety) | 1 | 1 |
+| Critical (Aliasing Bug) | 1 | 1 |
+| Warning (Logic Bug) | 1 | 1 |
+| Warning (State Guard) | 1 | 1 |
+| Warning (Vector Math) | 1 | 1 |
+| Warning (Dead Code) | 1 | 1 |
+| Suggestion (Unused Import) | 1 | 1 |
+| **Total** | **11** | **11** |
+
+### Critical Issues
+
+#### Issue 141: EquipBotWithMedicalGear Silent Failure (95%)
+- **File:** `MedicBuddyController.cs:745-814`
+- **Status:** FIXED
+- **Description:** All error paths in `EquipBotWithMedicalGear` logged at `LogDebug` level, which is hidden by BepInEx's default log threshold (Info+). Runtime test showed zero "Equipped X medical items" success messages, meaning all items failed to be added but errors were invisible.
+- **Fix Applied:**
+  - Promoted ALL `LogDebug` calls to `LogWarning` in the method
+  - Added `LogWarning` when `addedCount == 0` (zero items added despite attempts)
+  - Next runtime test will show exactly which step fails (item creation, inventory space, move operation)
+
+#### Issue 142: _preExistingBotIds Not Thread-Safe (85%)
+- **File:** `MedicBuddyController.cs:446-468`
+- **Status:** FIXED
+- **Description:** `SnapshotExistingBots()` called `Clear()` on the existing HashSet then repopulated it. `OnBotCreated()` reads `_preExistingBotIds.Contains()` on a potentially different callback timing, risking a read during the Clear+repopulate window.
+- **Fix Applied:** Allocate a new `HashSet<int>` instead of Clear+reuse. Assign to `_preExistingBotIds` atomically after population.
+
+#### Issue 143: Missing HealthController Null Check in TrySummonMedicBuddy (90%)
+- **File:** `MedicBuddyController.cs:269`
+- **Status:** FIXED
+- **Description:** `_player.HealthController.IsAlive` accessed without null-checking `HealthController` first. After player death, `HealthController` can be null before `IsAlive` can be checked.
+- **Fix Applied:** Added `_player.HealthController == null ||` to the condition.
+
+#### Issue 144: DespawnTeam Snapshot Aliasing (80%)
+- **File:** `MedicBuddyController.cs:1579-1606`
+- **Status:** FIXED
+- **Description:** `DespawnTeam()` called `GetTeamSnapshot()` which returns the shared `_teamSnapshotBuffer`. If `bot.LeaveData.RemoveFromMap()` triggers a callback that re-enters `UpdateStateMachine` (which calls `GetTeamSnapshot`), the buffer gets overwritten during iteration.
+- **Fix Applied:** Use a dedicated `new List<BotOwner>(_activeTeam)` local copy instead of `GetTeamSnapshot()`.
+
+#### Issue 145: TeleportBotNearPlayer Error Logged at Debug (75%)
+- **File:** `MedicBuddyController.cs:1249-1253`
+- **Status:** FIXED
+- **Description:** Teleport failure catch logged at `LogDebug` (hidden). A teleport failure is operationally significant - it means a bot is stuck and can't reach the player.
+- **Fix Applied:** Promoted to `LogWarning`.
+
+#### Issue 146: EquipBotWithMedicalGear Outer Catch at Debug (75%)
+- **File:** `MedicBuddyController.cs:810-813`
+- **Status:** FIXED
+- **Description:** The outer catch-all in `EquipBotWithMedicalGear` logged at `LogDebug`. If the entire method crashes, the error would be invisible.
+- **Fix Applied:** Promoted to `LogWarning`.
+
+### Warning Issues
+
+#### Issue 147: MedicLayer Distance Check Uses Player Position Instead of RallyPoint (85%)
+- **File:** `MedicBuddyMedicLayer.cs:134-138`
+- **Status:** FIXED
+- **Description:** `UpdateMedicState()` compared `BotOwner.Position` against `player.Position` to determine if the medic should start healing. When a Casualty Collection Point (CCP) is set via Y-key, the medic should check distance to the rally point instead.
+- **Fix Applied:** Changed to use `_controller.RallyPoint` instead of `player.Position`.
+
+#### Issue 148: Rally Point Can Be Set During Retreating/Despawning (70%)
+- **File:** `MedicBuddyController.cs:308-325`
+- **Status:** FIXED
+- **Description:** `TrySetRallyPoint()` only guarded against `Idle` and `Spawning` states. A player pressing Y during Retreating or Despawning would set a new rally point, potentially confusing the retreat logic.
+- **Fix Applied:** Added guard for `Retreating` and `Despawning` states (silently ignore, no notification needed since team is leaving).
+
+#### Issue 149: IsOutOfPlayerView Normalizes Before Zeroing Y (65%)
+- **File:** `MedicBuddyController.cs:830-838`
+- **Status:** FIXED
+- **Description:** `(candidatePos - _player.Position).normalized` normalizes the 3D vector first, then zeroes Y. This skews the horizontal angle calculation when there's a significant height difference (e.g., spawn on a different floor).
+- **Fix Applied:** Zero Y first, then let `Vector3.Angle` handle the unnormalized vectors (it normalizes internally).
+
+#### Issue 150: Dead WarnMedicDown() Method (60%)
+- **File:** `MedicBuddyNotifier.cs:198-201`
+- **Status:** FIXED
+- **Description:** `WarnMedicDown()` was unreferenced - it was replaced by `NotifyMedicPromoted()` when medic promotion was added, but the old method was never removed.
+- **Fix Applied:** Deleted the dead method.
+
+### Suggestion Issues
+
+#### Issue 151: Unused System.Linq Import (55%)
+- **File:** `MedicBuddyController.cs:6`
+- **Status:** FIXED
+- **Description:** `using System.Linq;` imported but no LINQ methods used. All `Contains()` calls are on `List<T>` and `HashSet<int>` (built-in, not LINQ).
+- **Fix Applied:** Removed the unused import.
+
+---
+
+## Ninth Review Fix History
+
+| Date | Issue | Files Modified | Notes |
+|------|-------|----------------|-------|
+| 2026-02-17 | Issue 141 | MedicBuddyController.cs | LogDebug→LogWarning in EquipBotWithMedicalGear |
+| 2026-02-17 | Issue 142 | MedicBuddyController.cs | New HashSet instead of Clear+reuse |
+| 2026-02-17 | Issue 143 | MedicBuddyController.cs | HealthController null check in TrySummonMedicBuddy |
+| 2026-02-17 | Issue 144 | MedicBuddyController.cs | Local list copy in DespawnTeam |
+| 2026-02-17 | Issue 145-146 | MedicBuddyController.cs | LogDebug→LogWarning for teleport/gear failures |
+| 2026-02-17 | Issue 147 | MedicBuddyMedicLayer.cs | Use RallyPoint for distance check |
+| 2026-02-17 | Issue 148 | MedicBuddyController.cs | Block rally point during retreat/despawn |
+| 2026-02-17 | Issue 149 | MedicBuddyController.cs | Fix Y-zeroing order in IsOutOfPlayerView |
+| 2026-02-17 | Issue 150 | MedicBuddyNotifier.cs | Remove dead WarnMedicDown method |
+| 2026-02-17 | Issue 151 | MedicBuddyController.cs | Remove unused System.Linq import |
+
+---
+
+## Updated Grand Totals (All Reviews)
+
+| Review | Issues Found | Fixed | Skipped |
+|--------|--------------|-------|---------|
+| First Review | 11 | 11 | 0 |
+| Second Review | 8 | 6 | 2 |
+| Third Review | 11 | 11 | 0 |
+| Fourth Review | 16 | 16 | 0 |
+| Fifth Review | 43 | 43 | 0 |
+| Sixth Review | 29 | 29 | 0 |
+| Seventh Review | 14 | 14 | 0 |
+| Eighth Review (Linus) | 8 | 8 | 0 |
+| **Ninth Review (Post-Runtime)** | **11** | **11** | **0** |
+| **Grand Total** | **151** | **149** | **2** |

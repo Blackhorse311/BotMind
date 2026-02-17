@@ -27,7 +27,7 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
             {
                 _startTime = Time.time;
                 _healingComplete = false;
-                BotMindPlugin.Log?.LogDebug($"[{BotOwner?.name ?? "Unknown"}] HealPatientLogic started");
+                BotMindPlugin.Log?.LogInfo($"[{BotOwner?.name ?? "Unknown"}] HealPatientLogic started");
             }
             catch (Exception ex)
             {
@@ -77,19 +77,22 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
                     return;
                 }
 
+                // Navigate to rally point (CCP) if set, otherwise to the player
+                Vector3 targetPos = controller.RallyPoint;
+
                 // Crouch while healing
                 BotOwner.SetPose(0f);
 
-                // Look at the player
-                BotOwner.Steering.LookToPoint(player.Position + Vector3.up * 1f);
+                // Look at the rally point / player position
+                BotOwner.Steering.LookToPoint(targetPos + Vector3.up * 1f);
 
-                // Stay near player
+                // Stay near rally point / player
                 // Sixth Review Fix (Issue 108): Use shared constant from MedicBuddyMedicLayer to avoid duplication
-                float distanceToPlayer = Vector3.Distance(BotOwner.Position, player.Position);
-                if (distanceToPlayer > MedicBuddyMedicLayer.HEAL_RANGE)
+                float distanceToTarget = Vector3.Distance(BotOwner.Position, targetPos);
+                if (distanceToTarget > MedicBuddyMedicLayer.HEAL_RANGE)
                 {
                     // Move closer if drifted away
-                    BotOwner.GoToPoint(player.Position, true, -1f, false, false, true, false, false);
+                    BotOwner.GoToPoint(targetPos, true, -1f, false, false, true, false, false);
                 }
             }
             catch (Exception ex)

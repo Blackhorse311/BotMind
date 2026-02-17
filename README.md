@@ -1,90 +1,64 @@
 # BotMind
 
-A combined bot AI enhancement mod for **SPT 4.0.12** that adds intelligent looting, questing, and the MedicBuddy on-demand medical team feature.
+**Smarter bots. On-demand medics.** Three AI modules in one package.
 
-## Features
+[![SPT 4.0.12](https://img.shields.io/badge/SPT-4.0.12-green.svg)](https://forge.sp-tarkov.com)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-### Looting
-Bots intelligently loot corpses, containers, and loose items based on value and inventory space. Configurable search radius, minimum item value, and per-category toggles.
+---
 
-### Questing
-PMC and Scav bots pursue objectives - visiting locations, exploring areas, searching for items, and extracting. Integrates with SAIN for extraction and combat awareness.
+## What It Does
 
-### MedicBuddy
-Summon a friendly medical team to your position for healing. A medic and shooter escorts spawn behind you, navigate to your location, establish a defensive perimeter, and the medic treats your injuries - restoring HP, stopping bleeds, fixing fractures, and repairing destroyed limbs.
+BotMind enhances bot AI with three modules: intelligent **looting**, objective-based **questing**, and the **MedicBuddy** on-demand medical team. Bots make smarter decisions. You get a medic on speed dial.
 
-## Installation
+### 30 Seconds to Understand
 
-1. Requires **SPT 4.0.12** with **BigBrain 1.4.x** installed
-2. **SAIN 3.x** recommended (optional - enables combat awareness and extraction)
-3. Extract the release zip directly into your SPT root folder (the zip contains the correct `BepInEx/plugins/` path structure)
-4. Launch SPT
+```
+Looting:     Bots scan area → Find valuable loot → Navigate → Pick up items
+Questing:    Bots get objectives → Navigate map → Explore → Extract
+MedicBuddy:  Press F10 → Team spawns → Medic heals you → Team retreats
+```
 
-## Usage
+---
 
-### MedicBuddy Controls
+## Key Features
 
-| Key | Action |
-|-----|--------|
-| **F10** | Summon medical team |
-| **Y** | Set Casualty Collection Point (CCP) at your position |
+| Feature | Description |
+|---------|-------------|
+| **Intelligent Looting** | Bots loot corpses, containers, and loose items based on value |
+| **Objective Questing** | PMC/Scav bots pursue objectives, explore areas, and extract |
+| **MedicBuddy** | Summon a friendly medical team with one keypress |
+| **Voice Lines** | 60 voice lines (EN/RU) for immersive medic interactions |
+| **CCP Rally Points** | Direct your medical team to a specific treatment location |
+| **Medic Promotion** | If the medic dies, a shooter gets promoted automatically |
+| **SAIN Integration** | Optional combat awareness and extraction support |
+| **Full Healing** | HP, bleeds, fractures, destroyed limbs - all restored |
 
-### How MedicBuddy Works
+---
 
-1. Press **F10** to summon the medical team
-2. A medic and shooter escorts spawn and navigate to your position
-3. Press **Y** to set a CCP rally point where you want treatment
-4. The team establishes a defensive perimeter
-5. The medic approaches and begins preparation (~10 seconds)
-6. You are placed into a prone position for treatment
-7. The medic heals all injuries (HP, bleeds, fractures, destroyed limbs)
-8. After treatment, you stand back up and the team retreats and despawns
+## Quick Start
 
-### Tips
+### Installation
 
-- **Use open areas for your CCP.** If you summon the team in a tight corridor, building, or cluttered area, bots may have trouble navigating to you. Move to an open space and reset your CCP with **Y** if the medic gets stuck.
-- The medic team is friendly and will not engage you. Shooter escorts will defend against hostile bots.
-- There is a 5-minute cooldown between summons (configurable).
-- MedicBuddy works in PMC raids only by default (configurable).
-- If a team bot becomes hostile (e.g., due to another mod's teamkill mechanic), it is immediately despawned for your safety.
-- If the medic is killed, a surviving shooter will be promoted to medic.
+**Manual Installation**
 
-## Configuration
+1. Download the [latest release](https://github.com/Blackhorse311/BotMind/releases/latest)
+2. Extract the archive directly into your SPT root folder (where `SPT.Server.exe` is located)
+3. The folder structure should look like:
 
-All settings are in `BepInEx/config/com.blackhorse311.botmind.cfg`. Settings can be edited while the game is closed, or through BepInEx's in-game configuration manager.
+```
+[SPT Root]/
+├── BepInEx/
+│   └── plugins/
+│       └── Blackhorse311-BotMind/
+│           ├── Blackhorse311.BotMind.dll
+│           └── voicelines/
+│               ├── en/  (30 voice lines)
+│               └── ru/  (30 voice lines)
+└── SPT.Server.exe
+```
 
-### General
-| Setting | Default | Description |
-|---------|---------|-------------|
-| Enable Looting | true | Master toggle for bot looting |
-| Enable Questing | true | Master toggle for bot questing |
-| Enable MedicBuddy | true | Master toggle for MedicBuddy |
-
-### Looting
-| Setting | Default | Description |
-|---------|---------|-------------|
-| Search Radius | 50m | How far bots look for loot |
-| Minimum Item Value | 5000 | Minimum ruble value to pick up |
-| Loot Corpses | true | Allow corpse looting |
-| Loot Containers | true | Allow container looting |
-| Loot Loose Items | true | Allow loose item pickup |
-
-### Questing
-| Setting | Default | Description |
-|---------|---------|-------------|
-| PMCs Do Quests | true | PMC bots pursue objectives |
-| Scavs Do Quests | false | Scav bots pursue objectives |
-| Quest Priority | 50 | Balance questing vs other behaviors |
-
-### MedicBuddy
-| Setting | Default | Description |
-|---------|---------|-------------|
-| Summon Keybind | F10 | Key to summon the medical team |
-| Cooldown | 300s | Seconds between summons |
-| Team Size | 4 | Number of bots (2-6) |
-| PMC Raids Only | true | Only available in PMC raids |
-
-## Dependencies
+### Dependencies
 
 | Mod | Required | Version |
 |-----|----------|---------|
@@ -92,25 +66,217 @@ All settings are in `BepInEx/config/com.blackhorse311.botmind.cfg`. Settings can
 | [BigBrain](https://forge.sp-tarkov.com/mods/DrakiaXYZ-BigBrain) | Yes | 1.4.x |
 | [SAIN](https://forge.sp-tarkov.com/mods/Solarint-SAIN) | Recommended | 3.x |
 
+### Default Behavior
+
+- **Looting** and **Questing** are active on all bots automatically
+- **MedicBuddy** is activated on-demand with **F10**
+- All three modules can be individually toggled
+
+### Configuration
+
+Press **F12** → Find "BotMind" → Adjust settings
+
+Config file location: `BepInEx/config/com.blackhorse311.botmind.cfg`
+
+---
+
+## MedicBuddy
+
+### Controls
+
+| Key | Action |
+|-----|--------|
+| **F10** | Summon medical team |
+| **Y** | Set Casualty Collection Point (CCP) at your position |
+
+### How It Works
+
+1. Press **F10** to summon the medical team
+2. A medic and shooter escorts spawn behind you and navigate to your position
+3. Press **Y** to set a CCP rally point where you want treatment
+4. The team establishes a defensive perimeter around the CCP
+5. The medic approaches and begins preparation (~10 seconds)
+6. You are placed into a prone position for treatment
+7. The medic heals all injuries (HP, bleeds, fractures, destroyed limbs)
+8. After treatment completes, you stand back up and the team retreats
+
+### Tips
+
+- **Use open areas for your CCP.** Tight corridors, buildings, and cluttered areas can cause navigation issues. If the medic gets stuck, move to an open space and press **Y** to reset the rally point.
+- Shooter escorts will engage any hostile bots that approach during treatment.
+- There is a 5-minute cooldown between summons (configurable).
+- MedicBuddy works in PMC raids only by default (configurable).
+- If a team bot becomes hostile (e.g., due to another mod's teamkill mechanic), it is immediately despawned for your safety.
+- If the medic is killed, a surviving shooter is automatically promoted to medic.
+- Team bots carry medical items (IFAK, CMS, bandages) that you can loot from their corpses.
+
+---
+
+## Configuration Reference
+
+Access mod settings via **F12** (BepInEx Configuration Manager) or edit the config file directly.
+
+### General
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| Enable Looting | true | Master toggle for bot looting |
+| Enable Questing | true | Master toggle for bot questing |
+| Enable MedicBuddy | true | Master toggle for MedicBuddy |
+
+### Looting
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| Search Radius | 50m | How far bots scan for loot |
+| Minimum Item Value | 5000 | Minimum ruble value to pick up |
+| Loot Corpses | true | Allow corpse looting |
+| Loot Containers | true | Allow container looting |
+| Loot Loose Items | true | Allow loose item pickup |
+
+### Questing
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| PMCs Do Quests | true | PMC bots pursue objectives |
+| Scavs Do Quests | false | Scav bots pursue objectives |
+| Quest Priority | 50 | Balance questing vs other behaviors |
+
+### MedicBuddy
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| Summon Keybind | F10 | Key to summon the medical team |
+| Cooldown | 300s | Seconds between summons |
+| Team Size | 4 | Number of bots in the team (2-6) |
+| PMC Raids Only | true | Only available in PMC raids |
+
+---
+
+## Compatibility
+
+| Mod/Version | Status | Notes |
+|-------------|--------|-------|
+| **SPT 4.0.12** | Supported | Tested and verified |
+| **BigBrain 1.4.x** | Required | AI layer framework |
+| **SAIN 3.x** | Recommended | Combat awareness and extraction |
+| **Custom Items** | Full Support | Works with any modded gear |
+
+---
+
+## Troubleshooting
+
+| Problem | Solution |
+|---------|----------|
+| MedicBuddy not responding to F10 | Check mod is enabled in F12 settings. Verify PMC-only setting if playing as Scav. |
+| Medic getting stuck | Move to an open area and press **Y** to set a new CCP. |
+| Team bots not spawning | Check BepInEx console for errors. Ensure BigBrain is installed. |
+| Bots not looting | Verify looting is enabled. Check search radius and minimum value settings. |
+| SAIN features not working | SAIN is optional. Install SAIN 3.x for combat awareness and extraction. |
+
+---
+
 ## Building from Source
 
-```bash
-# Set SPT_PATH environment variable
-$env:SPT_PATH = "C:\path\to\SPT"
+### Prerequisites
 
-# Build
+- .NET 9 SDK
+- SPT 4.0.12 installation
+
+### Build Steps
+
+1. Clone the repository
+2. Set `SPT_PATH` environment variable to your SPT installation
+3. Build:
+
+```bash
+# Client plugin
 dotnet build src/client/Blackhorse311.BotMind.csproj
+
+# Server mod
+dotnet build src/server/Blackhorse311.BotMind.Server.csproj
 
 # Run tests
 dotnet test src/tests/Blackhorse311.BotMind.Tests.csproj
 ```
+
+---
+
+## Security & Compliance
+
+Source code is available on [GitHub](https://github.com/Blackhorse311/BotMind) for independent verification and building.
+
+### Forge Compliance
+
+This mod meets all [SPT Forge Content Guidelines](https://forge.sp-tarkov.com/content-guidelines) and [Community Standards](https://forge.sp-tarkov.com/community-standards).
+
+**Highlights:**
+- MIT licensed, fully open source
+- Zero network activity (fully offline)
+- No obfuscation, no data collection
+- Comprehensive error handling throughout
+- Operational-only logging (no ASCII art, no credits, no links)
+- 82 unit tests, 9 code reviews
+
+---
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+## Credits
+
+**Author:** Blackhorse311
+
+### Version 1.0.0 - Human + AI Collaboration
+
+BotMind v1.0.0 was developed through a collaboration between Blackhorse311 and [Claude](https://claude.ai), an AI assistant created by Anthropic. This partnership brought together human creativity, game testing, and design direction with AI-assisted code implementation, architecture design, and quality assurance.
+
+Together, we delivered:
+- 3 feature modules (Looting, Questing, MedicBuddy)
+- 60 voice lines with EN/RU localization
+- 82 unit tests with full coverage
+- 9 code reviews with 149 fixes
+- 3 successful runtime tests
+- Comprehensive documentation and architecture decision records
+
+**Thanks to:**
+- **SPT Team** - For the amazing SPT project
+- **BepInEx Team** - For the modding framework
+- **DrakiaXYZ** - For BigBrain AI framework
+- **Solarint** - For SAIN combat AI
+- **Anthropic** - For creating Claude
+
+### Community Contributors
+
+*No community contributors yet - be the first! Report bugs via [GitHub Issues](https://github.com/Blackhorse311/BotMind/issues) and get credited here.*
+
+---
+
+## Changelog
+
+### v1.0.0 (2026-02-17)
+- Initial release for SPT 4.0.12
+- **Looting:** Corpse, container, and loose item looting with value-based prioritization
+- **Questing:** Objective management, navigation, exploration, extraction with SAIN integration
+- **MedicBuddy:** On-demand medical team with phased healing sequence
+  - Voice lines (60 lines, EN/RU) and toast notifications
+  - CCP rally point system (Y-key)
+  - Medic promotion on medic KIA
+  - Hostile bot detection and immediate despawn
+  - Medical items on bot corpses (lootable IFAK, CMS, bandages)
+  - Player forced prone during treatment
+- 82 unit tests, 9 code reviews (151 issues found, 149 fixed)
+
+---
 
 ## Support
 
 ### Bug Reports
 
 Please use our [GitHub Issue Tracker](https://github.com/Blackhorse311/BotMind/issues) with the bug report template. Include:
-
 - SPT and mod versions
 - Which module is affected (MedicBuddy, Looting, Questing)
 - Steps to reproduce
@@ -123,58 +289,6 @@ Please use our [GitHub Issue Tracker](https://github.com/Blackhorse311/BotMind/i
 
 Have an idea? [Open a feature request](https://github.com/Blackhorse311/BotMind/issues/new?template=feature_request.yml) on GitHub.
 
-## Changelog
+### Community
 
-### v1.0.0 (2026-02-17)
-- Initial release for SPT 4.0.12
-- Looting module: corpse, container, and loose item looting with value-based prioritization
-- Questing module: objective management, navigation, exploration, extraction
-- MedicBuddy module: on-demand medical team with phased healing sequence
-  - Voice lines (60 lines, EN/RU) and toast notifications
-  - CCP rally point system (Y-key)
-  - Medic promotion on medic KIA
-  - Hostile bot detection and immediate despawn
-  - Medical items on bot corpses (lootable)
-  - Player forced prone during treatment
-- 82 unit tests, 9 code reviews (151 issues found, 149 fixed)
-
-## Security & Compliance
-
-Source code is available on [GitHub](https://github.com/Blackhorse311/BotMind) for independent verification and building.
-
-### Forge Compliance
-
-This mod meets all SPT Forge Content Guidelines and Community Standards.
-
-- MIT licensed, fully open source
-- Zero network activity (fully offline)
-- No obfuscation, no data collection
-- Comprehensive error handling throughout
-- Operational-only logging (no ASCII art, no credits, no links)
-- Comprehensive documentation
-
-## License
-
-[MIT](LICENSE)
-
-## Credits
-
-**Author:** Blackhorse311
-
-### Human + AI Collaboration
-
-BotMind v1.0.0 was developed through a collaboration between Blackhorse311 and Claude, an AI assistant created by Anthropic. This partnership brought together human creativity, game testing, and design direction with AI-assisted code implementation, architecture design, and quality assurance.
-
-Together, we delivered:
-- 3 feature modules (Looting, Questing, MedicBuddy)
-- 82 unit tests with full coverage
-- 9 code reviews with 149 fixes
-- 3 successful runtime tests
-- Comprehensive documentation and architecture decision records
-
-### Thanks to:
-- **SPT Team** - For the amazing SPT project
-- **BepInEx Team** - For the modding framework
-- **DrakiaXYZ** - For BigBrain AI framework
-- **Solarint** - For SAIN combat AI
-- **Anthropic** - For creating Claude
+- [SPT Discord](https://discord.gg/spt) - Community help and discussion

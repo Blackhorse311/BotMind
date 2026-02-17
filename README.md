@@ -250,6 +250,10 @@ Together, we delivered:
 - **Solarint** - For SAIN combat AI
 - **Anthropic** - For creating Claude
 
+**Inspiration:**
+- **[DanW](https://github.com/dwesterwick/SPTQuestingBots)** - QuestingBots for SPT 3.x inspired the Questing module
+- **[Skwizzy](https://github.com/Skwizzy/SPT-LootingBots)** - LootingBots for SPT 3.x inspired the Looting module
+
 ### Community Contributors
 
 *No community contributors yet - be the first! Report bugs via [GitHub Issues](https://github.com/Blackhorse311/BotMind/issues) and get credited here.*

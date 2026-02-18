@@ -228,6 +228,10 @@ namespace Blackhorse311.BotMind.Modules.Questing
                 IsCurrentObjectiveComplete = true;
                 _currentObjective = null;
             }
+            // Issue #1 Fix: Immediately select next objective so HasActiveObjective stays true.
+            // Without this, the layer deactivates for up to 5 seconds between objectives,
+            // causing bots to stand idle after reaching each waypoint.
+            UpdateObjectives();
         }
 
         /// <summary>Seventh Review Fix (Issue 198): Adds a new objective to the quest list.</summary>

@@ -135,11 +135,11 @@ namespace Blackhorse311.BotMind.Modules.Questing
                 if (movedDistance < STUCK_THRESHOLD)
                 {
                     _stuckCount++;
-                    BotMindPlugin.Log?.LogDebug($"[{BotOwner.name}] Stuck check failed ({_stuckCount}/{MAX_STUCK_COUNT})");
+                    BotMindPlugin.Log?.LogWarning($"[{BotOwner.name}] Stuck check failed ({_stuckCount}/{MAX_STUCK_COUNT}) at {distanceToTarget:F1}m from target");
 
                     if (_stuckCount >= MAX_STUCK_COUNT)
                     {
-                        BotMindPlugin.Log?.LogDebug($"[{BotOwner.name}] Navigation failed - stuck");
+                        BotMindPlugin.Log?.LogWarning($"[{BotOwner.name}] Navigation failed - stuck at {distanceToTarget:F1}m from target");
                         _currentState = State.Failed;
                         return;
                     }
@@ -154,7 +154,10 @@ namespace Blackhorse311.BotMind.Modules.Questing
             // Set movement parameters
             BotOwner.SetPose(1f); // Standing
             BotOwner.SetTargetMoveSpeed(GetMoveSpeed(distanceToTarget));
-            BotOwner.Steering.LookToMovingDirection();
+            // Issue #1 Fix: Removed BotOwner.Steering.LookToMovingDirection() — it was called
+            // every frame, overriding EFT's natural head-scanning that feeds LookSensor.
+            // Without it, bots never "see" nearby enemies and SAIN combat never activates.
+            // GoToPoint() already handles movement-direction facing.
 
             // Update path periodically
             if (Time.time >= _nextMoveTime)
@@ -181,7 +184,7 @@ namespace Blackhorse311.BotMind.Modules.Questing
                         _stuckCount++;
                         if (_stuckCount >= MAX_STUCK_COUNT)
                         {
-                            BotMindPlugin.Log?.LogDebug($"[{BotOwner.name}] Navigation failed - no path");
+                            BotMindPlugin.Log?.LogWarning($"[{BotOwner.name}] Navigation failed - no valid path to target");
                             _currentState = State.Failed;
                         }
                     }

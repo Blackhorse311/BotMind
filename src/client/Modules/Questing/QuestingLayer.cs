@@ -76,8 +76,9 @@ namespace Blackhorse311.BotMind.Modules.Questing
                     return false;
                 }
 
-                // Update quest objectives periodically
-                if (Time.time - _lastQuestUpdateTime > UPDATE_INTERVAL)
+                // Issue #1 Fix: Always update immediately when idle (prevents idle gaps).
+                // Only throttle to 5s when we already have an active objective.
+                if (!_questManager.HasActiveObjective || Time.time - _lastQuestUpdateTime > UPDATE_INTERVAL)
                 {
                     _lastQuestUpdateTime = Time.time;
                     _questManager.UpdateObjectives();

@@ -190,7 +190,7 @@ namespace Blackhorse311.BotMind.Modules.Questing
             // Movement
             BotOwner.SetPose(1f);
             BotOwner.SetTargetMoveSpeed(distance > 30f ? 1f : 0.6f);
-            BotOwner.Steering.LookToMovingDirection();
+            // Issue #1 Fix: Removed LookToMovingDirection() — overrides natural head-scanning
 
             if (Time.time >= _nextMoveTime)
             {

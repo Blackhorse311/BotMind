@@ -284,7 +284,8 @@ Together, we delivered:
 
 ### Community Contributors
 
-*No community contributors yet - be the first! Report bugs via [GitHub Issues](https://github.com/Blackhorse311/BotMind/issues) and get credited here.*
+- **[Th3Kenix](https://github.com/Th3Kenix)** - Reported questing idle/stuck bug and PMC non-engagement ([#1](https://github.com/Blackhorse311/BotMind/issues/1))
+- **LO010OL** - Identified LootingBots compatibility question on SPT Forge
 
 ---
 

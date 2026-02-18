@@ -2,6 +2,7 @@ using Comfort.Common;
 using EFT;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.AI;
 
 namespace Blackhorse311.BotMind.Modules.Questing
 {
@@ -23,6 +24,9 @@ namespace Blackhorse311.BotMind.Modules.Questing
         // Seventh Review Fix (Issue 168): Static comparison delegate to avoid lambda allocation in Sort
         private static readonly System.Comparison<QuestObjective> _priorityComparer =
             (a, b) => b.Priority.CompareTo(a.Priority);
+
+        // Cached NavMeshPath to avoid allocation per GetRandomNavMeshPoint call
+        private readonly NavMeshPath _cachedNavPath = new NavMeshPath();
 
         /// <summary>Seventh Review Fix (Issue 194): Whether this bot has an active objective to pursue.</summary>
         public bool HasActiveObjective => _currentObjective != null;
@@ -113,28 +117,43 @@ namespace Blackhorse311.BotMind.Modules.Questing
 
         private void GeneratePMCObjectives()
         {
-            // Generate ACTUAL exploration objectives - random points within reasonable range
-            // Not "explore where you already are" which is useless
-
-            // Generate 2-4 exploration waypoints in different directions
+            // Generate 2-4 exploration waypoints with path reachability validation
             int waypointCount = UnityEngine.Random.Range(2, 5);
+            int successCount = 0;
             for (int i = 0; i < waypointCount; i++)
             {
                 Vector3 randomPoint = GetRandomNavMeshPoint(_bot.Position, 50f, 150f);
                 if (randomPoint != Vector3.zero)
                 {
+                    successCount++;
                     _objectives.Add(new QuestObjective
                     {
                         Type = QuestObjectiveType.GoToLocation,
                         Name = $"Waypoint {i + 1}",
                         TargetPosition = randomPoint,
                         CompletionRadius = 5f,
-                        Priority = 50f - (i * 5f) // Stagger priorities
+                        Priority = 50f - (i * 5f)
                     });
                 }
             }
 
-            // Add extraction objective with lower priority
+            // Fallback: if no reachable waypoints found, explore locally instead of standing idle
+            if (successCount == 0)
+            {
+                BotMindPlugin.Log?.LogWarning(
+                    $"[{_bot?.name}] No reachable waypoints generated — falling back to local exploration");
+                _objectives.Add(new QuestObjective
+                {
+                    Type = QuestObjectiveType.Explore,
+                    Name = "Local Patrol",
+                    TargetPosition = _bot.Position,
+                    CompletionRadius = 40f,
+                    Priority = 45f
+                });
+            }
+
+            // Extract objective — SAIN handles actual extraction point assignment.
+            // TargetPosition is unused when SAIN assigns the exfil.
             _objectives.Add(new QuestObjective
             {
                 Type = QuestObjectiveType.Extract,
@@ -145,11 +164,11 @@ namespace Blackhorse311.BotMind.Modules.Questing
         }
 
         /// <summary>
-        /// Gets a random point on NavMesh within min/max range. Returns Vector3.zero on failure.
+        /// Gets a random point on NavMesh within min/max range that has a valid path from origin.
+        /// Returns Vector3.zero on failure.
         /// </summary>
         private Vector3 GetRandomNavMeshPoint(Vector3 origin, float minRange, float maxRange)
         {
-            // Try a few times to find a valid point
             for (int attempt = 0; attempt < 10; attempt++)
             {
                 float distance = UnityEngine.Random.Range(minRange, maxRange);
@@ -158,9 +177,17 @@ namespace Blackhorse311.BotMind.Modules.Questing
                 Vector3 direction = Quaternion.Euler(0, angle, 0) * Vector3.forward;
                 Vector3 targetPoint = origin + direction * distance;
 
-                if (UnityEngine.AI.NavMesh.SamplePosition(targetPoint, out UnityEngine.AI.NavMeshHit hit, 20f, UnityEngine.AI.NavMesh.AllAreas))
+                // Tolerance reduced from 20f to 5f to avoid snapping to wrong floors/buildings
+                if (NavMesh.SamplePosition(targetPoint, out NavMeshHit hit, 5f, NavMesh.AllAreas))
                 {
-                    return hit.position;
+                    // Validate a complete path exists — a valid NavMesh position may be on
+                    // a disconnected island, different floor, or across an unbridgeable gap
+                    _cachedNavPath.ClearCorners();
+                    if (NavMesh.CalculatePath(origin, hit.position, NavMesh.AllAreas, _cachedNavPath)
+                        && _cachedNavPath.status == NavMeshPathStatus.PathComplete)
+                    {
+                        return hit.position;
+                    }
                 }
             }
             return Vector3.zero;
@@ -168,13 +195,14 @@ namespace Blackhorse311.BotMind.Modules.Questing
 
         private void GenerateScavObjectives()
         {
-            // Scavs actually patrol - they don't stand in one spot
             int patrolPoints = UnityEngine.Random.Range(2, 4);
+            int successCount = 0;
             for (int i = 0; i < patrolPoints; i++)
             {
                 Vector3 patrolPoint = GetRandomNavMeshPoint(_bot.Position, 30f, 100f);
                 if (patrolPoint != Vector3.zero)
                 {
+                    successCount++;
                     _objectives.Add(new QuestObjective
                     {
                         Type = QuestObjectiveType.GoToLocation,
@@ -184,6 +212,21 @@ namespace Blackhorse311.BotMind.Modules.Questing
                         Priority = 40f - (i * 3f)
                     });
                 }
+            }
+
+            // Fallback: if no reachable patrol points found, explore locally
+            if (successCount == 0)
+            {
+                BotMindPlugin.Log?.LogWarning(
+                    $"[{_bot?.name}] No reachable patrol points generated — falling back to local exploration");
+                _objectives.Add(new QuestObjective
+                {
+                    Type = QuestObjectiveType.Explore,
+                    Name = "Local Patrol",
+                    TargetPosition = _bot.Position,
+                    CompletionRadius = 30f,
+                    Priority = 40f
+                });
             }
         }
 

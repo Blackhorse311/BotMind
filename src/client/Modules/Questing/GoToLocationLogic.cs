@@ -30,11 +30,13 @@ namespace Blackhorse311.BotMind.Modules.Questing
         private float _stuckCheckTime;
         private Vector3 _lastPosition;
         private int _stuckCount;
+        private int _pathFailCount;
 
         private const float MOVE_UPDATE_INTERVAL = 2f;
         private const float STUCK_CHECK_INTERVAL = 5f;
         private const float STUCK_THRESHOLD = 0.5f;
         private const int MAX_STUCK_COUNT = 3;
+        private const int MAX_PATH_FAIL_COUNT = 2;
 
         public GoToLocationLogic(BotOwner botOwner) : base(botOwner)
         {
@@ -51,6 +53,7 @@ namespace Blackhorse311.BotMind.Modules.Questing
                 _stuckCheckTime = Time.time + STUCK_CHECK_INTERVAL;
                 _lastPosition = BotOwner.Position;
                 _stuckCount = 0;
+                _pathFailCount = 0;
                 BotMindPlugin.Log?.LogDebug($"[{BotOwner?.name ?? "Unknown"}] GoToLocationLogic started");
             }
             catch (Exception ex)
@@ -181,13 +184,24 @@ namespace Blackhorse311.BotMind.Modules.Questing
 
                     if (pathResult != NavMeshPathStatus.PathComplete)
                     {
-                        _stuckCount++;
-                        if (_stuckCount >= MAX_STUCK_COUNT)
+                        _pathFailCount++;
+                        BotMindPlugin.Log?.LogWarning(
+                            $"[{BotOwner.name}] Path to target failed ({_pathFailCount}/{MAX_PATH_FAIL_COUNT}) at {distanceToTarget:F1}m");
+                        if (_pathFailCount >= MAX_PATH_FAIL_COUNT)
                         {
-                            BotMindPlugin.Log?.LogWarning($"[{BotOwner.name}] Navigation failed - no valid path to target");
+                            BotMindPlugin.Log?.LogWarning(
+                                $"[{BotOwner.name}] Navigation failed — target unreachable at {distanceToTarget:F1}m");
                             _currentState = State.Failed;
                         }
                     }
+                    else
+                    {
+                        _pathFailCount = 0;
+                    }
+                }
+                else
+                {
+                    _pathFailCount = 0;
                 }
             }
         }

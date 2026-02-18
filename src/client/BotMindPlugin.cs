@@ -17,7 +17,7 @@ using Blackhorse311.BotMind.Patches;
 
 namespace Blackhorse311.BotMind
 {
-    [BepInPlugin("com.blackhorse311.botmind", "Blackhorse311-BotMind", "1.1.1")]
+    [BepInPlugin("com.blackhorse311.botmind", "Blackhorse311-BotMind", "1.2.0")]
     [BepInDependency("com.SPT.core", "4.0.0")]
     [BepInDependency("xyz.drakia.bigbrain", "1.4.0")]
     [BepInDependency("me.sol.sain", BepInDependency.DependencyFlags.SoftDependency)]
@@ -305,30 +305,21 @@ namespace Blackhorse311.BotMind
                 Log.LogInfo($"Registered LootingLayer for {lootingBrains.Count} brain types");
             }
 
-            // Register Questing layer for PMCs (and optionally Scavs)
+            // Register Questing layer for all brain types when module is enabled.
+            // Always register both PMC and Scav brains — QuestingLayer.IsActive() checks
+            // PMCsDoQuests/ScavsDoQuests at runtime so the F12 toggle works without restart.
             if (BotMindConfig.EnableQuesting.Value)
             {
                 var questingBrains = new List<string>();
+                questingBrains.AddRange(PMCBrains);
+                questingBrains.AddRange(ScavBrains);
 
-                if (BotMindConfig.PMCsDoQuests.Value)
-                {
-                    questingBrains.AddRange(PMCBrains);
-                }
+                BrainManager.AddCustomLayer(
+                    typeof(QuestingLayer),
+                    questingBrains,
+                    QUESTING_PRIORITY);
 
-                if (BotMindConfig.ScavsDoQuests.Value)
-                {
-                    questingBrains.AddRange(ScavBrains);
-                }
-
-                if (questingBrains.Count > 0)
-                {
-                    BrainManager.AddCustomLayer(
-                        typeof(QuestingLayer),
-                        questingBrains,
-                        QUESTING_PRIORITY);
-
-                    Log.LogInfo($"Registered QuestingLayer for {questingBrains.Count} brain types");
-                }
+                Log.LogInfo($"Registered QuestingLayer for {questingBrains.Count} brain types");
             }
 
             // Register MedicBuddy layers for all bots (filtered by controller)

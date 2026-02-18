@@ -184,7 +184,7 @@ namespace Blackhorse311.BotMind.Modules.Looting
             // Navigate to container
             BotOwner.SetPose(1f);
             BotOwner.SetTargetMoveSpeed(0.8f);
-            BotOwner.Steering.LookToMovingDirection();
+            // LookToMovingDirection removed — blocks EFT's LookSensor from detecting enemies
 
             if (_nextMoveTime < Time.time)
             {

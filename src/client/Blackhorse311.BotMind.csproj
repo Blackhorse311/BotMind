@@ -9,7 +9,7 @@
     <Authors>Blackhorse311</Authors>
     <Copyright>Copyright © 2026 Blackhorse311</Copyright>
     <Description>Combined bot AI enhancement mod for SPT - Looting, Questing, and MedicBuddy features</Description>
-    <AssemblyVersion>1.1.1</AssemblyVersion>
+    <AssemblyVersion>1.2.0</AssemblyVersion>
     <FileVersion>$(AssemblyVersion)</FileVersion>
     <Version>$(AssemblyVersion)</Version>
   </PropertyGroup>

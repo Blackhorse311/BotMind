@@ -152,6 +152,31 @@ Access mod settings via **F12** (BepInEx Configuration Manager) or edit the conf
 | Team Size | 4 | Number of bots in the team (2-6) |
 | PMC Raids Only | true | Only available in PMC raids |
 
+### Performance
+
+| Setting | Default | Range | Description |
+|---------|---------|-------|-------------|
+| Max Bots Per Map | 0 (off) | 0-31 | Override max bots per map. When MedicBuddy is enabled, team-size slots are auto-reserved so your medical team always has room to spawn. **0 = use game defaults** (no override). Example: 31 with Team Size 6 = 25 regular bots + 6 reserved. |
+
+> **Slot Reservation:** When `Max Bots Per Map` is set above 0 and MedicBuddy is enabled, the mod automatically reserves slots equal to your Team Size. Regular bot spawns fill the remaining capacity, and MedicBuddy temporarily uses the full limit during spawning.
+
+#### Hardware Guidance
+
+Higher bot counts increase CPU load. Bots are the most performance-intensive element in SPT — each one runs AI decisions, pathfinding, perception, and combat simulation. Use this table to choose a bot count appropriate for your hardware:
+
+| Bot Count | CPU Recommendation | RAM | Expected Impact |
+|-----------|-------------------|-----|-----------------|
+| Default (18-22) | Any modern quad-core | 16 GB+ | Baseline — no change from vanilla |
+| 25 | 6+ cores with strong single-thread | 16 GB+ | Mild FPS dip (5-15%) |
+| 28 | 8+ cores (Ryzen 5/7, i5/i7 12th+) | 32 GB+ | Moderate on heavy maps (10-20%) |
+| 31 (max) | High-end (Ryzen 7/9, i7/i9 12th+) | 32 GB+ | Noticeable on Streets (15-30%), fine elsewhere |
+
+**Notes:**
+- Bot AI is primarily single-threaded — single-core clock speed matters most
+- Streets of Tarkov is the heaviest map due to scene complexity + bot count
+- Factory is the smallest map — 31 bots there may cause pathfinding congestion
+- These estimates are approximate and vary by system configuration
+
 ---
 
 ## Compatibility
@@ -161,6 +186,9 @@ Access mod settings via **F12** (BepInEx Configuration Manager) or edit the conf
 | **SPT 4.0.12** | Supported | Tested and verified |
 | **BigBrain 1.4.x** | Required | AI layer framework |
 | **SAIN 3.x** | Recommended | Combat awareness and extraction |
+| **LootingBots** | Compatible* | BotMind auto-disables its Looting module when LootingBots is detected. MedicBuddy and Questing work normally alongside LootingBots. |
+| **SWAG + Donuts** | Compatible | Bot limit slider works alongside spawn wave mods |
+| **AI Limit** | Compatible | Distance-based AI toggle is independent of spawn limits |
 | **Custom Items** | Full Support | Works with any modded gear |
 
 ---
@@ -217,7 +245,7 @@ This mod meets all [SPT Forge Content Guidelines](https://forge.sp-tarkov.com/co
 - No obfuscation, no data collection
 - Comprehensive error handling throughout
 - Operational-only logging (no ASCII art, no credits, no links)
-- 82 unit tests, 9 code reviews
+- 112 unit tests, 9 code reviews
 
 ---
 
@@ -238,7 +266,7 @@ BotMind v1.0.0 was developed through a collaboration between Blackhorse311 and [
 Together, we delivered:
 - 3 feature modules (Looting, Questing, MedicBuddy)
 - 60 voice lines with EN/RU localization
-- 82 unit tests with full coverage
+- 112 unit tests with full coverage
 - 9 code reviews with 149 fixes
 - 3 successful runtime tests
 - Comprehensive documentation and architecture decision records
@@ -261,6 +289,20 @@ Together, we delivered:
 ---
 
 ## Changelog
+
+### v1.1.0 (2026-02-17)
+- **Bot Limit Slider:** New "Max Bots Per Map" config (0-31) with automatic MedicBuddy slot reservation
+  - When MedicBuddy is enabled, team-size slots are auto-reserved so the medical team always has room to spawn
+  - Harmony patch on `BotsController.SetSettings` — compatible with SWAG+Donuts and AI Limit
+  - Hardware guidance table added to README
+- **Escort Combat Awareness:** Shooter bots now actively scan for and engage nearby threats
+  - Scans `AllAlivePlayersList` every 1s for hostiles within 80m
+  - Registers up to 4 nearest threats via `CheckAndAddEnemy()` — EFT's combat AI handles engagement
+  - Escorts face the nearest threat instead of looking randomly outward
+- **Escort Difficulty Config:** New "Escort Difficulty" setting (0-3, default 2=hard) for escort bot combat skill
+- **LootingBots Compatibility:** Auto-detects LootingBots and disables BotMind's Looting module to avoid conflicts
+  - MedicBuddy and Questing continue to work alongside LootingBots
+- 30 new unit tests for bot limit reservation math (112 total)
 
 ### v1.0.0 (2026-02-17)
 - Initial release for SPT 4.0.12
@@ -296,4 +338,4 @@ Have an idea? [Open a feature request](https://github.com/Blackhorse311/BotMind/
 
 ### Community
 
-- [SPT Discord](https://discord.gg/spt) - Community help and discussion
+- [SPT Discord](https://discord.com/invite/Xn9msqQZan) - Community help and discussion

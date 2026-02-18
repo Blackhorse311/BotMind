@@ -1,6 +1,7 @@
 # Build outputs
 bin/
 obj/
+dist/
 [Dd]ebug/
 [Rr]elease/
 

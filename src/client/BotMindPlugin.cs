@@ -13,13 +13,15 @@ using Blackhorse311.BotMind.Configuration;
 using Blackhorse311.BotMind.Modules.Looting;
 using Blackhorse311.BotMind.Modules.Questing;
 using Blackhorse311.BotMind.Modules.MedicBuddy;
+using Blackhorse311.BotMind.Patches;
 
 namespace Blackhorse311.BotMind
 {
-    [BepInPlugin("com.blackhorse311.botmind", "Blackhorse311-BotMind", "1.0.0")]
+    [BepInPlugin("com.blackhorse311.botmind", "Blackhorse311-BotMind", "1.1.0")]
     [BepInDependency("com.SPT.core", "4.0.0")]
     [BepInDependency("xyz.drakia.bigbrain", "1.4.0")]
     [BepInDependency("me.sol.sain", BepInDependency.DependencyFlags.SoftDependency)]
+    [BepInDependency("me.skwizzy.lootingbots", BepInDependency.DependencyFlags.SoftDependency)]
     public class BotMindPlugin : BaseUnityPlugin
     {
         // Healthcare-grade singleton with proper thread safety
@@ -43,6 +45,7 @@ namespace Blackhorse311.BotMind
         // Third Review Fix: Store patch instances for proper cleanup
         private GameStartedPatch _gameStartedPatch;
         private GameWorldDisposePatch _gameWorldDisposePatch;
+        private BotLimitPatch _botLimitPatch;
 
         // Brain names for different bot types
         // CRITICAL: These must match BaseBrain.ShortName() return values exactly (case-sensitive)
@@ -121,6 +124,7 @@ namespace Blackhorse311.BotMind
                     {
                         _gameStartedPatch?.Disable();
                         _gameWorldDisposePatch?.Disable();
+                        _botLimitPatch?.Disable();
                     }
                     catch (Exception cleanupEx)
                     {
@@ -156,6 +160,7 @@ namespace Blackhorse311.BotMind
                 // Disable Harmony patches to prevent memory leaks
                 _gameStartedPatch?.Disable();
                 _gameWorldDisposePatch?.Disable();
+                _botLimitPatch?.Disable();
 
                 if (_medicBuddyController != null)
                 {
@@ -176,8 +181,10 @@ namespace Blackhorse311.BotMind
             // Third Review Fix: Store patch instances for cleanup in OnDestroy
             _gameStartedPatch = new GameStartedPatch();
             _gameWorldDisposePatch = new GameWorldDisposePatch();
+            _botLimitPatch = new BotLimitPatch();
             _gameStartedPatch.Enable();
             _gameWorldDisposePatch.Enable();
+            _botLimitPatch.Enable();
         }
 
         internal void OnGameWorldCreated(GameWorld gameWorld)
@@ -204,6 +211,9 @@ namespace Blackhorse311.BotMind
             try
             {
                 Log.LogDebug("GameWorld destroyed - cleaning up BotMind modules");
+
+                // Reset bot limit state for next raid
+                BotLimitManager.Reset();
 
                 // Clean up audio clips before destroying controller
                 MedicBuddyAudio.Cleanup();
@@ -271,7 +281,17 @@ namespace Blackhorse311.BotMind
             const int MEDICBUDDY_PRIORITY = 95; // High priority for MedicBuddy team
 
             // Register Looting layer for PMCs and Scavs
-            if (BotMindConfig.EnableLooting.Value)
+            // Skip if LootingBots is installed — their layers would conflict (priority, loot caching, inventory transactions)
+            bool lootingBotsDetected = BepInEx.Bootstrap.Chainloader.PluginInfos.ContainsKey("me.skwizzy.lootingbots");
+            if (lootingBotsDetected)
+            {
+                Log.LogWarning(
+                    "LootingBots detected — BotMind's Looting module has been auto-disabled to avoid conflicts. " +
+                    "LootingBots will handle all bot looting behavior. " +
+                    "MedicBuddy and Questing modules remain active.");
+            }
+
+            if (BotMindConfig.EnableLooting.Value && !lootingBotsDetected)
             {
                 var lootingBrains = new List<string>();
                 lootingBrains.AddRange(PMCBrains);

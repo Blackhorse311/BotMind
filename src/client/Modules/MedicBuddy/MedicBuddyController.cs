@@ -8,6 +8,7 @@ using System.Threading;
 using UnityEngine;
 using UnityEngine.AI;
 using Blackhorse311.BotMind.Configuration;
+using Blackhorse311.BotMind.Patches;
 
 namespace Blackhorse311.BotMind.Modules.MedicBuddy
 {
@@ -398,9 +399,13 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
                     else
                         spawnType = WildSpawnType.assault; // Scav player gets Scav allies
 
+                    // Temporarily raise bot cap to allow MedicBuddy bots through
+                    BotLimitManager.BeginMedicBuddySpawn();
+
+                    BotDifficulty escortDifficulty = (BotDifficulty)BotMindConfig.MedicBuddyEscortDifficulty.Value;
                     for (int i = 0; i < teamSize; i++)
                     {
-                        spawner.SpawnBotByTypeForce(1, spawnType, BotDifficulty.normal, new BotSpawnParams());
+                        spawner.SpawnBotByTypeForce(1, spawnType, escortDifficulty, new BotSpawnParams());
                     }
 
                     BotMindPlugin.Log?.LogInfo($"Requested spawn of {teamSize} MedicBuddy bots (type: {spawnType})");
@@ -414,6 +419,7 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
                     // Sixth Review Fix (Issue 100): Include stack trace in error log
                     BotMindPlugin.Log?.LogError($"Failed to spawn MedicBuddy team: {ex.Message}\n{ex.StackTrace}");
                     MedicBuddyNotifier.WarnSpawnFailed();
+                    BotLimitManager.EndMedicBuddySpawn();
                     UnsubscribeFromSpawner();
                     SetState(MedicBuddyState.Idle);
                 }
@@ -591,6 +597,7 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
             {
                 // Issue 1 Fix: Use centralized unsubscribe method
                 UnsubscribeFromSpawner();
+                BotLimitManager.EndMedicBuddySpawn();
 
                 int teamCount;
                 lock (_teamLock)
@@ -1153,6 +1160,7 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
 
                 // Issue 1 Fix: Use centralized unsubscribe method
                 UnsubscribeFromSpawner();
+                BotLimitManager.EndMedicBuddySpawn();
 
                 // Sixth Review Fix (Issue 107): Thread-safe team count access
                 int teamCount;
@@ -1675,6 +1683,7 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
         private void DespawnTeam()
         {
             BotMindPlugin.Log?.LogInfo("Despawning MedicBuddy team");
+            BotLimitManager.OnMedicBuddyDespawned();
 
             // Use a dedicated local copy instead of GetTeamSnapshot's shared buffer.
             // RemoveFromMap() may trigger callbacks that re-enter UpdateStateMachine,

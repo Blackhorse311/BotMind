@@ -247,6 +247,7 @@ All modules must integrate with SAIN:
 | Corpse Looting | **COMPLETE** | LootCorpseLogic.cs with equipment value estimation |
 | Container Looting | **COMPLETE** | LootContainerLogic.cs with item filtering |
 | Loose Item Pickup | **COMPLETE** | PickupItemLogic.cs with path validation |
+| LootingBots Compatibility | **COMPLETE** | Auto-detects LootingBots and disables BotMind looting to avoid conflicts |
 | Questing Layer | **COMPLETE** | QuestingLayer.cs with objective management |
 | Objective Generation | **COMPLETE** | NavMesh-validated waypoints for PMCs/Scavs |
 | Navigation | **COMPLETE** | GoToLocationLogic.cs with stuck detection |
@@ -254,15 +255,18 @@ All modules must integrate with SAIN:
 | Extraction | **COMPLETE** | ExtractLogic.cs with SAIN integration |
 | MedicBuddy Controller | **COMPLETE** | Full state machine with 7 phases |
 | Bot Spawning | **COMPLETE** | BotSpawner integration with friendly assignment |
+| Bot Limit Slider | **COMPLETE** | BotLimitPatch + BotLimitManager with slot reservation for MedicBuddy |
 | Inter-Team Friendship | **COMPLETE** | MakeTeamBotsFriendly() + FinalizeTeamFriendship() cross-links all BotsGroups |
 | Healing Interaction | **COMPLETE** | Comprehensive: HP, bleeds, fractures, destroyed limbs via ActiveHealthController |
 | Hostile Bot Detection | **COMPLETE** | CheckTeamHostility() detects and despawns hostile team bots |
 | CCP Rally Point | **COMPLETE** | Y-key sets Casualty Collection Point; bots converge on fixed position |
 | Medic Promotion | **COMPLETE** | TryPromoteMedic() promotes surviving shooter when medic KIA |
 | Pre-Summon Validation | **COMPLETE** | Health check, medical supplies check, PMC-only check with notifications |
+| Escort Combat Awareness | **COMPLETE** | DefendPerimeterLogic scans for threats, feeds CheckAndAddEnemy, faces nearest |
+| Escort Difficulty Config | **COMPLETE** | Configurable BotDifficulty (0-3, default hard) for escort bots |
 | Medical Gear on Bots | **IN PROGRESS** | EquipBotWithMedicalGear() implemented but silently failing - see known issues |
 | Voice Lines + Notifications | **COMPLETE** | MedicBuddyNotifier (EN/RU) + MedicBuddyAudio with 60 voice lines |
-| Unit Tests | **COMPLETE** | 82 passing tests covering all modules |
+| Unit Tests | **COMPLETE** | 112 passing tests covering all modules |
 
 ### Code Review Status
 

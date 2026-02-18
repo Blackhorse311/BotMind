@@ -130,6 +130,27 @@ namespace Blackhorse311.BotMind.Configuration
         /// </summary>
         public static ConfigEntry<int> MedicBuddyVoiceVolume { get; private set; }
 
+        /// <summary>
+        /// Combat difficulty of escort (shooter) bots. Higher difficulty = better accuracy,
+        /// faster reactions, and tighter aim. Maps to EFT's BotDifficulty enum.
+        /// 0 = easy, 1 = normal, 2 = hard (default), 3 = impossible.
+        /// </summary>
+        public static ConfigEntry<int> MedicBuddyEscortDifficulty { get; private set; }
+
+        #endregion
+
+        #region Performance Settings
+
+        /// <summary>
+        /// Override the maximum number of bots allowed on the map.
+        /// 0 = use game defaults (no override, no slot reservation).
+        /// When set above 0 and MedicBuddy is enabled, team-size slots are automatically
+        /// reserved so the medical team can always spawn without delay.
+        /// Example: 31 with Team Size 6 = 25 regular bots + 6 reserved for MedicBuddy.
+        /// Higher values increase CPU load — see README for hardware recommendations.
+        /// </summary>
+        public static ConfigEntry<int> MaxBotsPerMap { get; private set; }
+
         #endregion
 
         public static void Init(ConfigFile config)
@@ -271,6 +292,28 @@ namespace Blackhorse311.BotMind.Configuration
                 new ConfigDescription(
                     "Volume for MedicBuddy voice lines (0-100)",
                     new AcceptableValueRange<int>(0, 100)));
+
+            MedicBuddyEscortDifficulty = config.Bind(
+                "4. MedicBuddy",
+                "Escort Difficulty",
+                2,
+                new ConfigDescription(
+                    "Combat skill of escort bots. Higher = better accuracy and faster reactions. " +
+                    "0 = easy, 1 = normal, 2 = hard (recommended), 3 = impossible",
+                    new AcceptableValueRange<int>(0, 3)));
+
+            // Performance
+            MaxBotsPerMap = config.Bind(
+                "5. Performance",
+                "Max Bots Per Map",
+                0,
+                new ConfigDescription(
+                    "Override max bots per map (0 = use game default). " +
+                    "When MedicBuddy is enabled, team-size slots are auto-reserved so the " +
+                    "medical team always has room to spawn. " +
+                    "Example: 31 with Team Size 6 = 25 regular bots + 6 reserved. " +
+                    "Higher values increase CPU load (see README for hardware recommendations).",
+                    new AcceptableValueRange<int>(0, 31)));
         }
     }
 }

@@ -291,6 +291,12 @@ Together, we delivered:
 
 ## Changelog
 
+### v1.1.1 (2026-02-18)
+- **Fix:** Bots no longer go idle after reaching quest waypoints — objective rotation is now immediate ([#1](https://github.com/Blackhorse311/BotMind/issues/1))
+- **Fix:** Stuck bots (counter at 3) now properly transition to the next objective instead of standing still
+- **Fix:** PMC bots from different teams now detect and engage each other during questing — removed `LookToMovingDirection()` override that was blocking EFT's natural head-scanning and enemy perception
+- Stuck/navigation failure logging upgraded from Debug (hidden) to Warning (visible)
+
 ### v1.1.0 (2026-02-17)
 - **Bot Limit Slider:** New "Max Bots Per Map" config (0-31) with automatic MedicBuddy slot reservation
   - When MedicBuddy is enabled, team-size slots are auto-reserved so the medical team always has room to spawn

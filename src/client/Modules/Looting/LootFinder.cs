@@ -37,7 +37,7 @@ namespace Blackhorse311.BotMind.Modules.Looting
         // Issue 9 Fix: Pre-allocated buffer for Physics.OverlapSphereNonAlloc to reduce GC pressure
         // Third Review Fix: Changed from static to instance-based to prevent race condition
         // when multiple bots scan simultaneously (was causing data corruption)
-        private readonly Collider[] _colliderBuffer = new Collider[64];
+        private readonly Collider[] _colliderBuffer = new Collider[256];
 
         // Issue 12 Fix: Cached NavMeshPath to avoid allocations in hot path
         private readonly NavMeshPath _cachedNavPath = new NavMeshPath();

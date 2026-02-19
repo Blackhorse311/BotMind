@@ -47,6 +47,11 @@ namespace Blackhorse311.BotMind.Modules.Looting
         /// </summary>
         private const float PICKUP_OPERATION_TIMEOUT = 30f;
         private float _pickupOperationStartTime;
+        /// <summary>
+        /// Overall timeout for the entire pickup operation.
+        /// Prevents bots from being stuck indefinitely on unreachable items.
+        /// </summary>
+        private const float OVERALL_TIMEOUT = 45f;
         // Issue 8 Fix: Track path failures separately to avoid premature abortion
         private int _pathFailureCount;
         private const int MAX_PATH_FAILURES = 3;
@@ -117,6 +122,15 @@ namespace Blackhorse311.BotMind.Modules.Looting
 
                 if (_target == null)
                 {
+                    _currentState = State.Complete;
+                    return;
+                }
+
+                // Overall timeout: prevent being stuck on any single item forever
+                if (Time.time - _startTime > OVERALL_TIMEOUT)
+                {
+                    BotMindPlugin.Log?.LogWarning(
+                        $"[{BotOwner?.name ?? "Unknown"}] Item pickup timed out after {OVERALL_TIMEOUT}s in state {_currentState}. Aborting.");
                     _currentState = State.Complete;
                     return;
                 }

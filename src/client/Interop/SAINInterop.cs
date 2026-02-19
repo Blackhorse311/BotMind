@@ -335,8 +335,30 @@ namespace Blackhorse311.BotMind.Interop
         {
             if (bot == null) return false;
 
+            // SAIN-based check: use TimeSinceSenseEnemy for accurate combat awareness
             float timeSinceEnemy = TimeSinceSenseEnemy(bot);
-            return timeSinceEnemy < safeCombatDelay;
+            if (timeSinceEnemy < safeCombatDelay)
+            {
+                return true;
+            }
+
+            // Non-SAIN fallback: check native EFT enemy awareness
+            // Without this, bots without SAIN would never yield to combat since
+            // TimeSinceSenseEnemy returns float.MaxValue when SAIN isn't loaded
+            if (!IsSAINLoaded())
+            {
+                try
+                {
+                    if (bot.Memory?.GoalEnemy != null) return true;
+                    if (bot.Memory?.IsUnderFire == true) return true;
+                }
+                catch
+                {
+                    // Memory access can throw if bot is being despawned
+                }
+            }
+
+            return false;
         }
     }
 }

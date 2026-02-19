@@ -45,6 +45,10 @@ namespace Blackhorse311.BotMind.Modules.Looting
         private const float CLOSE_DISTANCE = 2.0f;
         private const float INTERACTION_DURATION = 2.5f;
         private const float MOVE_ITEMS_DELAY = 0.4f;
+        // Stuck detection: if distance hasn't decreased after several GoToPoint attempts, abort
+        private float _lastMoveDistance = float.MaxValue;
+        private int _noProgressCount;
+        private const int MAX_NO_PROGRESS = 5;
         /// <summary>
         /// Bug Fix: Emergency timeout for callback-only completion.
         /// If the inventory transaction callback never fires (due to EFT bug), this prevents
@@ -52,6 +56,12 @@ namespace Blackhorse311.BotMind.Modules.Looting
         /// </summary>
         private const float MOVE_OPERATION_TIMEOUT = 30f;
         private float _moveOperationStartTime;
+        /// <summary>
+        /// Overall timeout for the entire container looting operation.
+        /// Prevents bots from being stuck indefinitely when they can't reach a container
+        /// (e.g., locked door, geometry obstruction) or the interaction bugs out.
+        /// </summary>
+        private const float OVERALL_TIMEOUT = 60f;
 
         // Seventh Review Fix (Issue 166): Static comparison delegate to avoid lambda allocation in Sort
         private static readonly System.Comparison<Item> _valueComparer = (a, b) =>
@@ -84,6 +94,8 @@ namespace Blackhorse311.BotMind.Modules.Looting
                 _interactionEndTime = -1f;
                 _isStopped = false; // Reset stopped flag on start
                 _moveInProgress = false; // Reset move flag on start
+                _lastMoveDistance = float.MaxValue;
+                _noProgressCount = 0;
                 BotMindPlugin.Log?.LogDebug($"[{BotOwner?.name ?? "Unknown"}] LootContainerLogic started");
             }
             catch (Exception ex)
@@ -126,6 +138,15 @@ namespace Blackhorse311.BotMind.Modules.Looting
 
                 if (_target == null)
                 {
+                    _currentState = State.Complete;
+                    return;
+                }
+
+                // Overall timeout: prevent being stuck on any single container forever
+                if (Time.time - _startTime > OVERALL_TIMEOUT)
+                {
+                    BotMindPlugin.Log?.LogWarning(
+                        $"[{BotOwner?.name ?? "Unknown"}] Container looting timed out after {OVERALL_TIMEOUT}s in state {_currentState}. Aborting.");
                     _currentState = State.Complete;
                     return;
                 }
@@ -189,6 +210,24 @@ namespace Blackhorse311.BotMind.Modules.Looting
             if (_nextMoveTime < Time.time)
             {
                 _nextMoveTime = Time.time + 3f;
+
+                // Stuck detection: abort if not making progress toward the container
+                if (dist < _lastMoveDistance - 0.3f)
+                {
+                    _noProgressCount = 0;
+                }
+                else
+                {
+                    _noProgressCount++;
+                    if (_noProgressCount >= MAX_NO_PROGRESS)
+                    {
+                        BotMindPlugin.Log?.LogWarning(
+                            $"[{BotOwner?.name ?? "Unknown"}] Stuck moving to container ({dist:F1}m away, no progress for {MAX_NO_PROGRESS} attempts). Aborting.");
+                        _currentState = State.Complete;
+                        return;
+                    }
+                }
+                _lastMoveDistance = dist;
 
                 Vector3 targetPos = _target.Position + _cachedOffset;
                 Vector3 dir = (targetPos - BotOwner.Position).normalized;

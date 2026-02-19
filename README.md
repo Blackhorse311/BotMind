@@ -2,8 +2,10 @@
 
 **Smarter bots. On-demand medics.** Three AI modules in one package.
 
-[![SPT 4.0.12](https://img.shields.io/badge/SPT-4.0.12-green.svg)](https://forge.sp-tarkov.com)
+[![SPT 4.0.12](https://img.shields.io/badge/SPT-4.0.12_REQUIRED-green.svg)](https://forge.sp-tarkov.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+> **REQUIRES SPT 4.0.12** — This mod is built exclusively for SPT 4.0.12. It will NOT work on 4.0.11 or earlier versions. If you are not on 4.0.12, do not install this mod.
 
 ---
 
@@ -60,11 +62,11 @@ MedicBuddy:  Press LCtrl+LAlt+F10 → Team spawns → Medic heals you → Team r
 
 ### Dependencies
 
-| Mod | Required | Version |
-|-----|----------|---------|
-| [SPT](https://www.sp-tarkov.com/) | Yes | 4.0.12 |
-| [BigBrain](https://forge.sp-tarkov.com/mods/DrakiaXYZ-BigBrain) | Yes | 1.4.x |
-| [SAIN](https://forge.sp-tarkov.com/mods/Solarint-SAIN) | Recommended | 3.x |
+| Mod | Required | Version | Notes |
+|-----|----------|---------|-------|
+| [SPT](https://www.sp-tarkov.com/) | **YES** | **4.0.12 only** | Will NOT work on 4.0.11 or earlier |
+| [BigBrain](https://forge.sp-tarkov.com/mods/DrakiaXYZ-BigBrain) | **YES** | 1.4.x | AI layer framework |
+| [SAIN](https://forge.sp-tarkov.com/mods/Solarint-SAIN) | Recommended | 3.x+ | Combat awareness and extraction |
 
 ### Default Behavior
 
@@ -183,7 +185,7 @@ Higher bot counts increase CPU load. Bots are the most performance-intensive ele
 
 | Mod/Version | Status | Notes |
 |-------------|--------|-------|
-| **SPT 4.0.12** | Supported | Tested and verified |
+| **SPT 4.0.12** | Supported | **Only supported version** — 4.0.11 and earlier are NOT compatible |
 | **BigBrain 1.4.x** | Required | AI layer framework |
 | **SAIN 3.x** | Recommended | Combat awareness and extraction |
 | **LootingBots** | Compatible* | BotMind auto-disables its Looting module when LootingBots is detected. MedicBuddy and Questing work normally alongside LootingBots. |
@@ -197,6 +199,7 @@ Higher bot counts increase CPU load. Bots are the most performance-intensive ele
 
 | Problem | Solution |
 |---------|----------|
+| Mod doesn't work / strange behavior | **Verify you are on SPT 4.0.12.** This mod does not support 4.0.11 or earlier. Check your SPT version in the launcher. |
 | MedicBuddy not responding to LCtrl+LAlt+F10 | Check mod is enabled in F12 settings. Verify PMC-only setting if playing as Scav. |
 | Medic getting stuck | Move to an open area and press **Y** to set a new CCP. |
 | Team bots not spawning | Check BepInEx console for errors. Ensure BigBrain is installed. |
@@ -245,7 +248,7 @@ This mod meets all [SPT Forge Content Guidelines](https://forge.sp-tarkov.com/co
 - No obfuscation, no data collection
 - Comprehensive error handling throughout
 - Operational-only logging (no ASCII art, no credits, no links)
-- 112 unit tests, 9 code reviews
+- 134 unit tests, 9 code reviews
 
 ---
 
@@ -290,6 +293,22 @@ Together, we delivered:
 ---
 
 ## Changelog
+
+### v1.3.0 (2026-02-19)
+- **Fix:** Looting collider buffer increased from 64 to 256 — prevents missing containers when loot-adding mods (Lots of Loot Redux, etc.) are installed
+- **Fix:** Overall timeout (60s) added to all looting logic — bots will no longer get stuck indefinitely at unreachable containers, corpses, or items
+- **Fix:** Stuck detection added to container and corpse navigation — bots abort after 5 consecutive attempts with no distance progress
+- **Fix:** Non-SAIN combat fallback — bots without SAIN now properly yield to combat via native EFT enemy detection (`GoalEnemy`, `IsUnderFire`)
+- 22 new unit tests for timeout, stuck detection, and combat fallback (134 total)
+
+### v1.2.0 (2026-02-18)
+- **Fix:** Bots no longer get stuck in "failed" or "standby" questing states ([#2](https://github.com/Blackhorse311/BotMind/issues/2), [#3](https://github.com/Blackhorse311/BotMind/issues/3))
+- **Fix:** NavMesh path validation added to objective generation — waypoints that can't be reached are rejected
+- **Fix:** SamplePosition tolerance reduced from 20m to 5m — prevents snapping to wrong floors/buildings
+- **Fix:** Local Explore fallback when long-range waypoints fail (40m PMC, 30m Scav)
+- **Fix:** QuestingLayer now registered for all brain types — F12 toggle works at runtime
+- **Fix:** Removed 5 additional `LookToMovingDirection()` calls from looting logic that were blocking enemy detection
+- Separate path fail counter from stuck counter in GoToLocationLogic
 
 ### v1.1.1 (2026-02-18)
 - **Fix:** Bots no longer go idle after reaching quest waypoints — objective rotation is now immediate ([#1](https://github.com/Blackhorse311/BotMind/issues/1))

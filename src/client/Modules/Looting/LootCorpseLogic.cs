@@ -59,6 +59,15 @@ namespace Blackhorse311.BotMind.Modules.Looting
         /// the bot from being stuck forever. Set very high to avoid false timeouts.
         /// </summary>
         private const float MOVE_OPERATION_TIMEOUT = 30f;
+        /// <summary>
+        /// Overall timeout for the entire corpse looting operation.
+        /// Prevents bots from being stuck indefinitely when they can't reach a corpse.
+        /// </summary>
+        private const float OVERALL_TIMEOUT = 60f;
+        // Stuck detection: if distance hasn't decreased after several GoToPoint attempts, abort
+        private float _lastMoveDistance = float.MaxValue;
+        private int _noProgressCount;
+        private const int MAX_NO_PROGRESS = 5;
 
         // Standards Compliance Fix: Cache reflection PropertyInfo to avoid hot-path allocation
         // The corpse body type varies at runtime, so we cache per-type to avoid repeated lookups
@@ -93,6 +102,8 @@ namespace Blackhorse311.BotMind.Modules.Looting
                 _unpauseTime = -1f;
                 _isStopped = false; // Reset stopped flag on start
                 _moveInProgress = false; // Reset move flag on start
+                _lastMoveDistance = float.MaxValue;
+                _noProgressCount = 0;
                 BotMindPlugin.Log?.LogDebug($"[{BotOwner?.name ?? "Unknown"}] LootCorpseLogic started");
             }
             catch (Exception ex)
@@ -137,6 +148,15 @@ namespace Blackhorse311.BotMind.Modules.Looting
 
                 if (_target == null)
                 {
+                    _currentState = State.Complete;
+                    return;
+                }
+
+                // Overall timeout: prevent being stuck on any single corpse forever
+                if (Time.time - _startTime > OVERALL_TIMEOUT)
+                {
+                    BotMindPlugin.Log?.LogWarning(
+                        $"[{BotOwner?.name ?? "Unknown"}] Corpse looting timed out after {OVERALL_TIMEOUT}s in state {_currentState}. Aborting.");
                     _currentState = State.Complete;
                     return;
                 }
@@ -209,6 +229,24 @@ namespace Blackhorse311.BotMind.Modules.Looting
             if (_nextMoveTime < Time.time)
             {
                 _nextMoveTime = Time.time + 3f;
+
+                // Stuck detection: abort if not making progress toward the corpse
+                if (dist < _lastMoveDistance - 0.3f)
+                {
+                    _noProgressCount = 0;
+                }
+                else
+                {
+                    _noProgressCount++;
+                    if (_noProgressCount >= MAX_NO_PROGRESS)
+                    {
+                        BotMindPlugin.Log?.LogWarning(
+                            $"[{BotOwner?.name ?? "Unknown"}] Stuck moving to corpse ({dist:F1}m away, no progress for {MAX_NO_PROGRESS} attempts). Aborting.");
+                        _currentState = State.Complete;
+                        return;
+                    }
+                }
+                _lastMoveDistance = dist;
 
                 Vector3 targetPos = _target.Position + _cachedOffset;
                 Vector3 dir = (targetPos - BotOwner.Position).normalized;

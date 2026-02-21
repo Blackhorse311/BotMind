@@ -96,6 +96,12 @@ namespace Blackhorse311.BotMind.Modules.Questing
             // Healthcare-grade: Wrap framework callback in try-catch
             try
             {
+                // v1.4.0 Fix: Reset pose/speed to defaults
+                if (BotOwner != null)
+                {
+                    BotOwner.SetPose(1f);
+                    BotOwner.SetTargetMoveSpeed(1f);
+                }
                 BotMindPlugin.Log?.LogDebug($"[{BotOwner?.name ?? "Unknown"}] FindItemLogic stopped");
                 _nearbyContainers.Clear();
                 _containerCache.Clear();
@@ -207,7 +213,8 @@ namespace Blackhorse311.BotMind.Modules.Questing
             }
 
             BotOwner.SetPose(1f);
-            BotOwner.SetTargetMoveSpeed(0.7f);
+            // v1.4.0 Fix: Increased speeds — 0.7f constant made bots creep
+            BotOwner.SetTargetMoveSpeed(distance > 15f ? 1f : 0.85f);
             // LookToMovingDirection removed — blocks EFT's LookSensor from detecting enemies
 
             if (Time.time >= _nextMoveTime)

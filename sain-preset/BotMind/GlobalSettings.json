@@ -1,0 +1,8 @@
+{
+  "Difficulty": {
+    "GainSightCoef": 1.5,
+    "AggressionCoef": 1.3,
+    "HearingDistanceCoef": 1.15,
+    "VisibleDistCoef": 1.1
+  }
+}

@@ -19,6 +19,10 @@ namespace Blackhorse311.BotMind.Modules.Questing
         private float _lastQuestUpdateTime;
         private const float UPDATE_INTERVAL = 5f;
 
+        // v1.4.0 Fix: Brief cooldown between objectives so bots look natural
+        private float _lastObjectiveCompleteTime;
+        private const float POST_OBJECTIVE_COOLDOWN = 5f;
+
         // Track current logic for completion checking
         private GoToLocationLogic _goToLogic;
         private ExploreAreaLogic _exploreLogic;
@@ -70,8 +74,15 @@ namespace Blackhorse311.BotMind.Modules.Questing
                     return false;
                 }
 
-                // Don't quest if bot is in combat
-                if (SAINInterop.IsBotInCombat(BotOwner))
+                // Don't quest if bot is in combat — duration configurable via F12
+                if (SAINInterop.IsBotInCombat(BotOwner, BotMindConfig.CombatAlertDuration.Value))
+                {
+                    return false;
+                }
+
+                // v1.4.0 Fix: Brief cooldown between objectives so bots look natural
+                // Lets SAIN/vanilla AI run for a few seconds, creating organic pauses
+                if (Time.time - _lastObjectiveCompleteTime < POST_OBJECTIVE_COOLDOWN)
                 {
                     return false;
                 }
@@ -146,30 +157,35 @@ namespace Blackhorse311.BotMind.Modules.Questing
                 {
                     _questManager.MarkCurrentObjectiveComplete();
                     _goToLogic = null;
+                    _lastObjectiveCompleteTime = Time.time;
                     return true;
                 }
                 if (_exploreLogic != null && _exploreLogic.IsComplete)
                 {
                     _questManager.MarkCurrentObjectiveComplete();
                     _exploreLogic = null;
+                    _lastObjectiveCompleteTime = Time.time;
                     return true;
                 }
                 if (_extractLogic != null && _extractLogic.IsComplete)
                 {
                     _questManager.MarkCurrentObjectiveComplete();
                     _extractLogic = null;
+                    _lastObjectiveCompleteTime = Time.time;
                     return true;
                 }
                 if (_findItemLogic != null && _findItemLogic.IsComplete)
                 {
                     _questManager.MarkCurrentObjectiveComplete();
                     _findItemLogic = null;
+                    _lastObjectiveCompleteTime = Time.time;
                     return true;
                 }
                 if (_placeItemLogic != null && _placeItemLogic.IsComplete)
                 {
                     _questManager.MarkCurrentObjectiveComplete();
                     _placeItemLogic = null;
+                    _lastObjectiveCompleteTime = Time.time;
                     return true;
                 }
 
@@ -225,6 +241,13 @@ namespace Blackhorse311.BotMind.Modules.Questing
             // Seventh Review Fix (Issue 142): Add try-catch to framework callback
             try
             {
+                // v1.4.0 Fix: Reset pose/speed so SAIN/vanilla AI doesn't inherit our values
+                if (BotOwner != null)
+                {
+                    BotOwner.SetPose(1f);
+                    BotOwner.SetTargetMoveSpeed(1f);
+                }
+
                 BotMindPlugin.Log?.LogDebug($"[{BotOwner?.name ?? "Unknown"}] QuestingLayer stopped");
                 _goToLogic = null;
                 _exploreLogic = null;
@@ -245,6 +268,11 @@ namespace Blackhorse311.BotMind.Modules.Questing
             {
                 stringBuilder.AppendLine("BotMind Questing Layer");
                 stringBuilder.AppendLine($"  Has Objective: {_questManager?.HasActiveObjective ?? false}");
+                float cooldownLeft = POST_OBJECTIVE_COOLDOWN - (Time.time - _lastObjectiveCompleteTime);
+                if (cooldownLeft > 0f)
+                {
+                    stringBuilder.AppendLine($"  Cooldown: {cooldownLeft:F0}s");
+                }
                 var obj = _questManager?.GetCurrentObjective();
                 if (obj != null)
                 {

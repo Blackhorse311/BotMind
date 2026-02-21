@@ -114,6 +114,13 @@ namespace Blackhorse311.BotMind.Modules.Looting
                 _isStopped = true;
                 _moveInProgress = false; // Reset to prevent stuck state on restart
 
+                // v1.4.0 Fix: Reset pose/speed to defaults
+                if (BotOwner != null)
+                {
+                    BotOwner.SetPose(1f);
+                    BotOwner.SetTargetMoveSpeed(1f);
+                }
+
                 BotMindPlugin.Log?.LogDebug($"[{BotOwner?.name ?? "Unknown"}] LootContainerLogic stopped");
                 _itemsCache.Clear();
                 _myContainers.Clear();
@@ -204,7 +211,8 @@ namespace Blackhorse311.BotMind.Modules.Looting
 
             // Navigate to container
             BotOwner.SetPose(1f);
-            BotOwner.SetTargetMoveSpeed(0.8f);
+            // v1.4.0 Fix: Sprint when far, jog when close — 0.8f constant was too slow
+            BotOwner.SetTargetMoveSpeed(dist > 15f ? 1f : 0.85f);
             // LookToMovingDirection removed — blocks EFT's LookSensor from detecting enemies
 
             if (_nextMoveTime < Time.time)

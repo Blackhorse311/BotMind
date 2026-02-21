@@ -31,6 +31,13 @@ namespace Blackhorse311.BotMind.Configuration
         /// </summary>
         public static ConfigEntry<bool> EnableMedicBuddy { get; private set; }
 
+        /// <summary>
+        /// How long (seconds) bots stay in combat alert after sensing an enemy.
+        /// During this time, bots will NOT quest or loot — they stay in SAIN/vanilla combat mode.
+        /// Higher values = bots fight longer before returning to objectives.
+        /// </summary>
+        public static ConfigEntry<float> CombatAlertDuration { get; private set; }
+
         #endregion
 
         #region Looting Settings
@@ -187,11 +194,23 @@ namespace Blackhorse311.BotMind.Configuration
                 true,
                 "Enable the MedicBuddy summon feature");
 
+            // v1.4.0: Combat alert duration — how long bots stay in fight mode after detecting an enemy
+            CombatAlertDuration = config.Bind(
+                "1. General",
+                "Combat Alert Duration",
+                30f,
+                new ConfigDescription(
+                    "Seconds bots stay in combat mode after sensing an enemy. " +
+                    "During this time, bots fight instead of questing/looting. " +
+                    "Higher = more realistic combat persistence (10 = quick return to tasks, 60 = prolonged engagement)",
+                    new AcceptableValueRange<float>(10f, 120f)));
+
             // Looting
+            // v1.4.0 Fix: Reduced default from 50f — 50m always found loot, causing hoover behavior
             LootingSearchRadius = config.Bind(
                 "2. Looting",
                 "Search Radius",
-                50f,
+                35f,
                 new ConfigDescription(
                     "Maximum distance bots will search for loot (meters)",
                     new AcceptableValueRange<float>(10f, 200f)));

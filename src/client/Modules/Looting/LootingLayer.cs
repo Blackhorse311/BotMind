@@ -18,7 +18,18 @@ namespace Blackhorse311.BotMind.Modules.Looting
         private readonly LootFinder _lootFinder;
         private float _lastLootScanTime;
         private LootTarget _currentTarget;
-        private const float SCAN_INTERVAL = 2f;
+        // v1.4.0 Fix: Increased from 2f — 2s scans made bots find loot too aggressively
+        private const float SCAN_INTERVAL = 8f;
+
+        // v1.4.0 Fix: Post-loot cooldown prevents vacuum behavior between targets
+        private float _lastLootCompleteTime;
+        private const float POST_LOOT_COOLDOWN = 15f;
+
+        // v1.4.0 Fix: Session limit — max targets per time window prevents hoover behavior
+        private int _lootActionsThisSession;
+        private const int MAX_LOOT_ACTIONS_PER_SESSION = 3;
+        private float _sessionResetTime;
+        private const float SESSION_RESET_DURATION = 120f;
 
         // Track the current logic instance for communication
         private LootCorpseLogic _corpseLogic;
@@ -52,10 +63,27 @@ namespace Blackhorse311.BotMind.Modules.Looting
                     return false;
                 }
 
-                // Don't loot if bot is in combat (SAIN check)
-                if (SAINInterop.IsBotInCombat(BotOwner))
+                // Don't loot if bot is in combat — duration configurable via F12
+                if (SAINInterop.IsBotInCombat(BotOwner, BotMindConfig.CombatAlertDuration.Value))
                 {
                     return false;
+                }
+
+                // v1.4.0 Fix: Cooldown between loot targets to prevent vacuum behavior
+                if (Time.time - _lastLootCompleteTime < POST_LOOT_COOLDOWN)
+                {
+                    return false;
+                }
+
+                // v1.4.0 Fix: Session limit — max 3 loot actions per 2-minute window
+                if (_lootActionsThisSession >= MAX_LOOT_ACTIONS_PER_SESSION)
+                {
+                    if (Time.time - _sessionResetTime < SESSION_RESET_DURATION)
+                    {
+                        return false;
+                    }
+                    // Session expired, reset counter
+                    _lootActionsThisSession = 0;
                 }
 
                 // Bug Fix: Call periodic cleanup to remove stale targets (destroyed objects).
@@ -128,18 +156,21 @@ namespace Blackhorse311.BotMind.Modules.Looting
             {
                 _lootFinder.MarkCurrentTargetComplete();
                 _corpseLogic = null;
+                RecordLootCompletion();
                 return true;
             }
             if (_containerLogic != null && _containerLogic.IsComplete)
             {
                 _lootFinder.MarkCurrentTargetComplete();
                 _containerLogic = null;
+                RecordLootCompletion();
                 return true;
             }
             if (_pickupLogic != null && _pickupLogic.IsComplete)
             {
                 _lootFinder.MarkCurrentTargetComplete();
                 _pickupLogic = null;
+                RecordLootCompletion();
                 return true;
             }
 
@@ -183,6 +214,17 @@ namespace Blackhorse311.BotMind.Modules.Looting
             }
         }
 
+        /// <summary>v1.4.0: Records loot completion for cooldown and session tracking.</summary>
+        private void RecordLootCompletion()
+        {
+            _lastLootCompleteTime = Time.time;
+            _lootActionsThisSession++;
+            if (_lootActionsThisSession >= MAX_LOOT_ACTIONS_PER_SESSION)
+            {
+                _sessionResetTime = Time.time;
+            }
+        }
+
         public LootTarget GetCurrentTarget()
         {
             return _currentTarget;
@@ -206,6 +248,13 @@ namespace Blackhorse311.BotMind.Modules.Looting
             // Seventh Review Fix (Issue 150): Add try-catch to framework callback
             try
             {
+                // v1.4.0 Fix: Reset pose/speed so SAIN/vanilla AI doesn't inherit our values
+                if (BotOwner != null)
+                {
+                    BotOwner.SetPose(1f);
+                    BotOwner.SetTargetMoveSpeed(1f);
+                }
+
                 BotMindPlugin.Log?.LogDebug($"[{BotOwner?.name ?? "Unknown"}] LootingLayer stopped");
                 // Third Review Fix: Call Cleanup instead of just ClearTargets for full resource cleanup
                 _lootFinder.Cleanup();
@@ -227,6 +276,12 @@ namespace Blackhorse311.BotMind.Modules.Looting
                 stringBuilder.AppendLine("BotMind Looting Layer");
                 stringBuilder.AppendLine($"  Has Target: {_lootFinder?.HasTargetLoot ?? false}");
                 stringBuilder.AppendLine($"  Targets Found: {_lootFinder?.TargetCount ?? 0}");
+                stringBuilder.AppendLine($"  Session: {_lootActionsThisSession}/{MAX_LOOT_ACTIONS_PER_SESSION}");
+                float cooldownLeft = POST_LOOT_COOLDOWN - (Time.time - _lastLootCompleteTime);
+                if (cooldownLeft > 0f)
+                {
+                    stringBuilder.AppendLine($"  Cooldown: {cooldownLeft:F0}s");
+                }
                 if (_currentTarget != null)
                 {
                     stringBuilder.AppendLine($"  Current: {(_currentTarget.IsCorpse ? "Corpse" : _currentTarget.IsContainer ? "Container" : "Item")}");

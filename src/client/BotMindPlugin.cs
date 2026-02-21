@@ -17,11 +17,12 @@ using Blackhorse311.BotMind.Patches;
 
 namespace Blackhorse311.BotMind
 {
-    [BepInPlugin("com.blackhorse311.botmind", "Blackhorse311-BotMind", "1.3.0")]
+    [BepInPlugin("com.blackhorse311.botmind", "Blackhorse311-BotMind", "1.4.0")]
     [BepInDependency("com.SPT.core", "4.0.0")]
     [BepInDependency("xyz.drakia.bigbrain", "1.4.0")]
     [BepInDependency("me.sol.sain", BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("me.skwizzy.lootingbots", BepInDependency.DependencyFlags.SoftDependency)]
+    [BepInDependency("xyz.drakia.waypoints", BepInDependency.DependencyFlags.SoftDependency)]
     public class BotMindPlugin : BaseUnityPlugin
     {
         // Healthcare-grade singleton with proper thread safety
@@ -108,6 +109,16 @@ namespace Blackhorse311.BotMind
                     currentStep = "game event patches";
                     Log.LogDebug($"Step 4: Enabling {currentStep}...");
                     EnablePatches();
+
+                    // Warn if Waypoints is missing — our NavMesh navigation degrades without it
+                    if (!BepInEx.Bootstrap.Chainloader.PluginInfos.ContainsKey("xyz.drakia.waypoints"))
+                    {
+                        Log.LogWarning(
+                            "DrakiaXYZ-Waypoints is not installed. BotMind's questing and looting " +
+                            "navigation relies on improved NavMesh data from Waypoints. Without it, " +
+                            "bots may freeze, get stuck, or fail to navigate. " +
+                            "Install Waypoints from: https://hub.sp-tarkov.com/files/file/134-waypoints-expanded-bot-patrols-and-navmesh/");
+                    }
 
                     // Mark as fully initialized only after all steps complete
                     _initializationComplete = true;

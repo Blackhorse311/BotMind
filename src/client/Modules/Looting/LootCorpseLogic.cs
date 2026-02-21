@@ -123,6 +123,13 @@ namespace Blackhorse311.BotMind.Modules.Looting
                 _isStopped = true;
                 _moveInProgress = false; // Reset to prevent stuck state on restart
 
+                // v1.4.0 Fix: Reset pose/speed to defaults (was leaving bots crouched)
+                if (BotOwner != null)
+                {
+                    BotOwner.SetPose(1f);
+                    BotOwner.SetTargetMoveSpeed(1f);
+                }
+
                 BotMindPlugin.Log?.LogDebug($"[{BotOwner?.name ?? "Unknown"}] LootCorpseLogic stopped");
                 _itemsCache.Clear();
                 _containersCache.Clear();

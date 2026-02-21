@@ -72,6 +72,12 @@ namespace Blackhorse311.BotMind.Modules.Questing
             // Seventh Review Fix (Issue 144): Add try-catch to framework callback
             try
             {
+                // v1.4.0 Fix: Reset pose/speed to defaults
+                if (BotOwner != null)
+                {
+                    BotOwner.SetPose(1f);
+                    BotOwner.SetTargetMoveSpeed(1f);
+                }
                 BotMindPlugin.Log?.LogDebug($"[{BotOwner?.name ?? "Unknown"}] ExtractLogic stopped");
             }
             catch (Exception ex)

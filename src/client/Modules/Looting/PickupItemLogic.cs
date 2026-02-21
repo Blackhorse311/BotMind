@@ -99,6 +99,13 @@ namespace Blackhorse311.BotMind.Modules.Looting
                 _isStopped = true;
                 _pickupInProgress = false; // Reset to prevent stuck state on restart
 
+                // v1.4.0 Fix: Reset pose/speed to defaults
+                if (BotOwner != null)
+                {
+                    BotOwner.SetPose(1f);
+                    BotOwner.SetTargetMoveSpeed(1f);
+                }
+
                 BotMindPlugin.Log?.LogDebug($"[{BotOwner?.name ?? "Unknown"}] PickupItemLogic stopped");
                 _containersCache.Clear();
             }

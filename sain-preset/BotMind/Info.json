@@ -1,0 +1,11 @@
+{
+  "Name": "BotMind",
+  "Description": "Tuned for BotMind mod - faster enemy detection, higher combat aggression, and improved hearing. Bots engage enemies more quickly instead of walking past each other. Based on SAIN 'hard' difficulty with targeted adjustments to detection and aggression coefficients.",
+  "Creator": "Blackhorse311",
+  "SAINVersion": "4.4.0",
+  "SAINPresetVersion": "1.0.0",
+  "DateCreated": "2026-02-21T00:00:00",
+  "BaseSAINDifficulty": "hard",
+  "IsCustom": true,
+  "CanEditName": true
+}

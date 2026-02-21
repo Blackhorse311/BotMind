@@ -68,6 +68,12 @@ namespace Blackhorse311.BotMind.Modules.Questing
             // Healthcare-grade: Wrap framework callback in try-catch
             try
             {
+                // v1.4.0 Fix: Reset pose/speed to defaults
+                if (BotOwner != null)
+                {
+                    BotOwner.SetPose(1f);
+                    BotOwner.SetTargetMoveSpeed(1f);
+                }
                 BotMindPlugin.Log?.LogDebug($"[{BotOwner?.name ?? "Unknown"}] GoToLocationLogic stopped");
             }
             catch (Exception ex)
@@ -208,10 +214,10 @@ namespace Blackhorse311.BotMind.Modules.Questing
 
         private float GetMoveSpeed(float distance)
         {
-            // Sprint when far, walk when close
-            if (distance > 50f) return 1f;      // Sprint
-            if (distance > 20f) return 0.7f;    // Jog
-            return 0.5f;                        // Walk
+            // v1.4.0 Fix: Increased speeds — old values (0.5/0.7) made bots creep
+            if (distance > 30f) return 1f;      // Sprint
+            if (distance > 5f) return 0.85f;    // Jog
+            return 0.7f;                        // Walk (final approach only)
         }
 
         public void SetTarget(Vector3 position, float completionRadius = 2f)

@@ -73,6 +73,12 @@ namespace Blackhorse311.BotMind.Modules.Questing
             // Healthcare-grade: Wrap framework callback in try-catch
             try
             {
+                // v1.4.0 Fix: Reset pose/speed to defaults
+                if (BotOwner != null)
+                {
+                    BotOwner.SetPose(1f);
+                    BotOwner.SetTargetMoveSpeed(1f);
+                }
                 BotMindPlugin.Log?.LogDebug($"[{BotOwner?.name ?? "Unknown"}] ExploreAreaLogic stopped");
                 _cachedNavPath.ClearCorners();
             }
@@ -189,7 +195,8 @@ namespace Blackhorse311.BotMind.Modules.Questing
 
             // Movement
             BotOwner.SetPose(1f);
-            BotOwner.SetTargetMoveSpeed(distance > 30f ? 1f : 0.6f);
+            // v1.4.0 Fix: Increased speeds — 0.6f made bots creep during exploration
+            BotOwner.SetTargetMoveSpeed(distance > 15f ? 1f : 0.85f);
             // Issue #1 Fix: Removed LookToMovingDirection() — overrides natural head-scanning
 
             if (Time.time >= _nextMoveTime)

@@ -5,6 +5,8 @@
 [![SPT 4.0.12](https://img.shields.io/badge/SPT-4.0.12_REQUIRED-green.svg)](https://forge.sp-tarkov.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
+> **Found a bug?** Report it on the [GitHub Issue Tracker](https://github.com/Blackhorse311/BotMind/issues) with your mod list and BepInEx log.
+
 > **REQUIRES SPT 4.0.12** — This mod is built exclusively for SPT 4.0.12. It will NOT work on 4.0.11 or earlier versions. If you are not on 4.0.12, do not install this mod.
 
 ---
@@ -52,13 +54,20 @@ MedicBuddy:  Press LCtrl+LAlt+F10 → Team spawns → Medic heals you → Team r
 [SPT Root]/
 ├── BepInEx/
 │   └── plugins/
-│       └── Blackhorse311-BotMind/
-│           ├── Blackhorse311.BotMind.dll
-│           └── voicelines/
-│               ├── en/  (30 voice lines)
-│               └── ru/  (30 voice lines)
+│       ├── Blackhorse311-BotMind/
+│       │   ├── Blackhorse311.BotMind.dll
+│       │   └── voicelines/
+│       │       ├── en/  (30 voice lines)
+│       │       └── ru/  (30 voice lines)
+│       └── SAIN/
+│           └── Presets/
+│               └── BotMind/          (optional SAIN preset)
+│                   ├── Info.json
+│                   └── GlobalSettings.json
 └── SPT.Server.exe
 ```
+
+> **SAIN Preset (Optional):** The `BotMind` preset folder auto-installs into SAIN's Presets directory. To activate it, press **F6** in-game and select "BotMind" from the preset dropdown. See [SAIN BotMind Preset](#sain-botmind-preset) for details.
 
 ### Dependencies
 
@@ -67,6 +76,7 @@ MedicBuddy:  Press LCtrl+LAlt+F10 → Team spawns → Medic heals you → Team r
 | [SPT](https://www.sp-tarkov.com/) | **YES** | **4.0.12 only** | Will NOT work on 4.0.11 or earlier |
 | [BigBrain](https://forge.sp-tarkov.com/mods/DrakiaXYZ-BigBrain) | **YES** | 1.4.x | AI layer framework |
 | [SAIN](https://forge.sp-tarkov.com/mods/Solarint-SAIN) | Recommended | 3.x+ | Combat awareness and extraction |
+| [Waypoints](https://forge.sp-tarkov.com/mods/DrakiaXYZ-Waypoints) | Recommended | 1.8.x+ | Improved NavMesh for bot navigation |
 
 ### Default Behavior
 
@@ -126,12 +136,13 @@ Access mod settings via **F12** (BepInEx Configuration Manager) or edit the conf
 | Enable Looting | true | Master toggle for bot looting |
 | Enable Questing | true | Master toggle for bot questing |
 | Enable MedicBuddy | true | Master toggle for MedicBuddy |
+| Combat Alert Duration | 30s | How long bots stay in combat mode after sensing an enemy (10-120s). Higher = bots fight longer before returning to questing/looting. |
 
 ### Looting
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| Search Radius | 50m | How far bots scan for loot |
+| Search Radius | 35m | How far bots scan for loot |
 | Minimum Item Value | 5000 | Minimum ruble value to pick up |
 | Loot Corpses | true | Allow corpse looting |
 | Loot Containers | true | Allow container looting |
@@ -181,6 +192,32 @@ Higher bot counts increase CPU load. Bots are the most performance-intensive ele
 
 ---
 
+## SAIN BotMind Preset
+
+BotMind includes an **optional** SAIN configuration preset that tunes bot detection and aggression to complement BotMind's questing and looting behavior. Without it, SAIN's default settings can cause bots to walk past enemies before engaging.
+
+### What It Changes
+
+| Setting | SAIN Default | BotMind Preset | Effect |
+|---------|-------------|----------------|--------|
+| GainSightCoef | 1.0 | 1.5 | 50% faster visual target acquisition |
+| AggressionCoef | 1.0 | 1.3 | 30% more aggressive combat decisions |
+| HearingDistanceCoef | 1.0 | 1.15 | 15% better hearing range |
+| VisibleDistCoef | 1.0 | 1.1 | 10% further vision range |
+
+### How to Activate
+
+1. The preset auto-installs to `BepInEx/plugins/SAIN/Presets/BotMind/` when you extract the mod
+2. In-game, press **F6** to open the SAIN GUI
+3. Select **"BotMind"** from the preset dropdown
+4. Changes take effect immediately
+
+### How to Revert
+
+Press **F6** and select any other preset (e.g., "hard"). Your original SAIN settings are never modified — the BotMind preset is a separate option, not an overwrite.
+
+---
+
 ## Compatibility
 
 | Mod/Version | Status | Notes |
@@ -188,9 +225,11 @@ Higher bot counts increase CPU load. Bots are the most performance-intensive ele
 | **SPT 4.0.12** | Supported | **Only supported version** — 4.0.11 and earlier are NOT compatible |
 | **BigBrain 1.4.x** | Required | AI layer framework |
 | **SAIN 3.x** | Recommended | Combat awareness and extraction |
+| **Waypoints** | Recommended | Improved NavMesh data prevents bots from freezing or getting stuck |
 | **LootingBots** | Compatible* | BotMind auto-disables its Looting module when LootingBots is detected. MedicBuddy and Questing work normally alongside LootingBots. |
 | **SWAG + Donuts** | Compatible | Bot limit slider works alongside spawn wave mods |
 | **AI Limit** | Compatible | Distance-based AI toggle is independent of spawn limits |
+| **FIKA** | Compatible | Confirmed working by community |
 | **Custom Items** | Full Support | Works with any modded gear |
 
 ---
@@ -204,6 +243,9 @@ Higher bot counts increase CPU load. Bots are the most performance-intensive ele
 | Medic getting stuck | Move to an open area and press **Y** to set a new CCP. |
 | Team bots not spawning | Check BepInEx console for errors. Ensure BigBrain is installed. |
 | Bots not looting | Verify looting is enabled. Check search radius and minimum value settings. |
+| Bots walking past enemies | Activate the BotMind SAIN preset (F6 menu). Increase Combat Alert Duration in F12. Install Waypoints mod. |
+| Bots freezing or getting stuck | Install [Waypoints](https://forge.sp-tarkov.com/mods/DrakiaXYZ-Waypoints) — BotMind's navigation relies on improved NavMesh data. |
+| Bots looting too aggressively | Lower Search Radius (default 35m) and check session limit (3 targets per 2 minutes). |
 | SAIN features not working | SAIN is optional. Install SAIN 3.x for combat awareness and extraction. |
 
 ---
@@ -248,7 +290,7 @@ This mod meets all [SPT Forge Content Guidelines](https://forge.sp-tarkov.com/co
 - No obfuscation, no data collection
 - Comprehensive error handling throughout
 - Operational-only logging (no ASCII art, no credits, no links)
-- 134 unit tests, 9 code reviews
+- 171 unit tests, 9 code reviews
 
 ---
 
@@ -289,10 +331,24 @@ Together, we delivered:
 
 - **[Th3Kenix](https://github.com/Th3Kenix)** - Reported questing idle/stuck bug and PMC non-engagement ([#1](https://github.com/Blackhorse311/BotMind/issues/1))
 - **LO010OL** - Identified LootingBots compatibility question on SPT Forge
+- **ExcellentBug, wookie143, Legitimancer, DigitalB** - Reported bot movement and looting behavior issues that led to v1.4.0 improvements
+- **thesubnautica19881** - Confirmed FIKA compatibility
 
 ---
 
 ## Changelog
+
+### v1.4.0 (2026-02-21)
+- **Fix:** Bot movement speeds increased across all modules — bots now jog/sprint instead of creeping (GoToLocation, ExploreArea, LootContainer, FindItem, PlaceItem)
+- **Fix:** Pose and move speed reset in all Stop() methods — bots no longer stay crouched or slow after transitioning between AI layers
+- **Fix:** Looting throttle — scan interval increased to 8s, 15s cooldown between targets, max 3 targets per 2-minute session window. Prevents "hoover" looting behavior.
+- **Fix:** Default loot search radius reduced from 50m to 35m (configurable 10-200m)
+- **Fix:** 5-second cooldown between questing objectives for natural-looking behavior transitions
+- **Fix:** Combat detection now always checks EFT's native enemy awareness (GoalEnemy, IsUnderFire) alongside SAIN, preventing bots from walking past visible enemies
+- **New:** Combat Alert Duration config (default 30s, range 10-120s) — controls how long bots stay in fight mode after sensing an enemy before resuming questing/looting
+- **New:** Waypoints soft dependency — warns at startup if DrakiaXYZ-Waypoints is not installed (navigation relies on improved NavMesh data)
+- **New:** Optional SAIN "BotMind" preset — tunes detection speed (+50%), aggression (+30%), and hearing (+15%) to complement BotMind behavior
+- 37 new unit tests for behavior throttle logic (171 total)
 
 ### v1.3.0 (2026-02-19)
 - **Fix:** Looting collider buffer increased from 64 to 256 — prevents missing containers when loot-adding mods (Lots of Loot Redux, etc.) are installed

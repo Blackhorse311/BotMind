@@ -329,9 +329,9 @@ namespace Blackhorse311.BotMind.Interop
         /// Check if a bot is currently in a combat state where it shouldn't be interrupted.
         /// </summary>
         /// <param name="bot">The bot to check.</param>
-        /// <param name="safeCombatDelay">Seconds since last enemy sense to consider safe.</param>
+        /// <param name="safeCombatDelay">Seconds since last enemy sense to consider safe (default 30s).</param>
         /// <returns>True if the bot is in combat and should not be interrupted.</returns>
-        public static bool IsBotInCombat(BotOwner bot, float safeCombatDelay = 10f)
+        public static bool IsBotInCombat(BotOwner bot, float safeCombatDelay = 30f)
         {
             if (bot == null) return false;
 
@@ -342,20 +342,18 @@ namespace Blackhorse311.BotMind.Interop
                 return true;
             }
 
-            // Non-SAIN fallback: check native EFT enemy awareness
-            // Without this, bots without SAIN would never yield to combat since
-            // TimeSinceSenseEnemy returns float.MaxValue when SAIN isn't loaded
-            if (!IsSAINLoaded())
+            // v1.4.0 Fix: Always check native EFT enemy awareness, even with SAIN loaded.
+            // SAIN's TimeSinceSenseEnemy has detection delay — bots can walk past visible
+            // enemies while SAIN's awareness system hasn't processed them yet.
+            // EFT's GoalEnemy is set by the engine's core detection, often faster than SAIN.
+            try
             {
-                try
-                {
-                    if (bot.Memory?.GoalEnemy != null) return true;
-                    if (bot.Memory?.IsUnderFire == true) return true;
-                }
-                catch
-                {
-                    // Memory access can throw if bot is being despawned
-                }
+                if (bot.Memory?.GoalEnemy != null) return true;
+                if (bot.Memory?.IsUnderFire == true) return true;
+            }
+            catch
+            {
+                // Memory access can throw if bot is being despawned
             }
 
             return false;

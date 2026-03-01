@@ -32,7 +32,8 @@ public class BehaviorThrottleTests
     private const float DEFAULT_SEARCH_RADIUS = 35f;
 
     // Mirror constants from QuestingLayer
-    private const float POST_OBJECTIVE_COOLDOWN = 5f;
+    // v1.5.0 Fix: Reduced from 5s to 3s, layer now stays active during cooldown
+    private const float POST_OBJECTIVE_COOLDOWN = 3f;
 
     // --- GoToLocation Move Speed Tests ---
 
@@ -141,9 +142,9 @@ public class BehaviorThrottleTests
     // --- Post-Objective Cooldown Tests ---
 
     [Theory]
-    [InlineData(2f, false)]    // 2s since objective, cooldown is 5s - should block
-    [InlineData(4.9f, false)]  // Just under cooldown - should block
-    [InlineData(5f, true)]     // At cooldown boundary (uses < not <=) - should allow
+    [InlineData(1f, false)]    // 1s since objective, cooldown is 3s - should block
+    [InlineData(2.9f, false)]  // Just under cooldown - should block
+    [InlineData(3f, true)]     // At cooldown boundary (uses < not <=) - should allow
     [InlineData(10f, true)]    // Well past cooldown - should allow
     public void PostObjectiveCooldown_ShouldBlockDuringCooldown(float timeSinceObjective, bool shouldAllow)
     {

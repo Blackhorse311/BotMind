@@ -17,7 +17,7 @@ using Blackhorse311.BotMind.Patches;
 
 namespace Blackhorse311.BotMind
 {
-    [BepInPlugin("com.blackhorse311.botmind", "Blackhorse311-BotMind", "1.4.0")]
+    [BepInPlugin("com.blackhorse311.botmind", "Blackhorse311-BotMind", "1.5.0")]
     [BepInDependency("com.SPT.core", "4.0.0")]
     [BepInDependency("xyz.drakia.bigbrain", "1.4.0")]
     [BepInDependency("me.sol.sain", BepInDependency.DependencyFlags.SoftDependency)]

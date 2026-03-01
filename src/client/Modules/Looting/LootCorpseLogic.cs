@@ -64,6 +64,11 @@ namespace Blackhorse311.BotMind.Modules.Looting
         /// Prevents bots from being stuck indefinitely when they can't reach a corpse.
         /// </summary>
         private const float OVERALL_TIMEOUT = 60f;
+        /// <summary>
+        /// v1.5.0 Fix: Guard flag to prevent timeout warning from logging every frame.
+        /// Without this, a single timed-out bot produces ~10K+ log lines per minute.
+        /// </summary>
+        private bool _hasTimedOut;
         // Stuck detection: if distance hasn't decreased after several GoToPoint attempts, abort
         private float _lastMoveDistance = float.MaxValue;
         private int _noProgressCount;
@@ -102,6 +107,7 @@ namespace Blackhorse311.BotMind.Modules.Looting
                 _unpauseTime = -1f;
                 _isStopped = false; // Reset stopped flag on start
                 _moveInProgress = false; // Reset move flag on start
+                _hasTimedOut = false; // Reset timeout guard on start
                 _lastMoveDistance = float.MaxValue;
                 _noProgressCount = 0;
                 BotMindPlugin.Log?.LogDebug($"[{BotOwner?.name ?? "Unknown"}] LootCorpseLogic started");
@@ -160,10 +166,15 @@ namespace Blackhorse311.BotMind.Modules.Looting
                 }
 
                 // Overall timeout: prevent being stuck on any single corpse forever
+                // v1.5.0 Fix: Log only once — without the guard this fires every frame
                 if (Time.time - _startTime > OVERALL_TIMEOUT)
                 {
-                    BotMindPlugin.Log?.LogWarning(
-                        $"[{BotOwner?.name ?? "Unknown"}] Corpse looting timed out after {OVERALL_TIMEOUT}s in state {_currentState}. Aborting.");
+                    if (!_hasTimedOut)
+                    {
+                        _hasTimedOut = true;
+                        BotMindPlugin.Log?.LogWarning(
+                            $"[{BotOwner?.name ?? "Unknown"}] Corpse looting timed out after {OVERALL_TIMEOUT}s in state {_currentState}. Aborting.");
+                    }
                     _currentState = State.Complete;
                     return;
                 }

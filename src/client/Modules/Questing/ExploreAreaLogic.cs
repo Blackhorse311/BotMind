@@ -151,11 +151,16 @@ namespace Blackhorse311.BotMind.Modules.Questing
 
         private void SelectNextWaypoint()
         {
+            // v1.5.0 Fix: Generate waypoints from bot's CURRENT position, not fixed center.
+            // The old approach used _centerPosition (set once at objective creation = spawn),
+            // so bots always circled spawn. Now exploration radiates outward from wherever the bot is.
+            Vector3 searchOrigin = BotOwner.Position;
+
             // Try to find a valid random point within the explore radius
             for (int attempts = 0; attempts < 10; attempts++)
             {
                 Vector2 randomOffset = Random.insideUnitCircle * _exploreRadius;
-                Vector3 candidatePoint = _centerPosition + new Vector3(randomOffset.x, 0f, randomOffset.y);
+                Vector3 candidatePoint = searchOrigin + new Vector3(randomOffset.x, 0f, randomOffset.y);
 
                 // Check if point is on NavMesh
                 if (NavMesh.SamplePosition(candidatePoint, out NavMeshHit hit, 5f, NavMesh.AllAreas))

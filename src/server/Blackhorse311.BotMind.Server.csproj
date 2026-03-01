@@ -6,7 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <OutputType>Library</OutputType>
-    <Version>1.1.1</Version>
+    <Version>1.5.0</Version>
     <Authors>Blackhorse311</Authors>
     <Description>Server-side component for BotMind mod - handles configuration and data endpoints</Description>
     <!-- Suppress CS9107: Primary constructor parameter captured warning (intentional pattern) -->

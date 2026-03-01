@@ -62,6 +62,11 @@ namespace Blackhorse311.BotMind.Modules.Looting
         /// (e.g., locked door, geometry obstruction) or the interaction bugs out.
         /// </summary>
         private const float OVERALL_TIMEOUT = 60f;
+        /// <summary>
+        /// v1.5.0 Fix: Guard flag to prevent timeout warning from logging every frame.
+        /// Without this, a single timed-out bot produces ~10K+ log lines per minute.
+        /// </summary>
+        private bool _hasTimedOut;
 
         // Seventh Review Fix (Issue 166): Static comparison delegate to avoid lambda allocation in Sort
         private static readonly System.Comparison<Item> _valueComparer = (a, b) =>
@@ -94,6 +99,7 @@ namespace Blackhorse311.BotMind.Modules.Looting
                 _interactionEndTime = -1f;
                 _isStopped = false; // Reset stopped flag on start
                 _moveInProgress = false; // Reset move flag on start
+                _hasTimedOut = false; // Reset timeout guard on start
                 _lastMoveDistance = float.MaxValue;
                 _noProgressCount = 0;
                 BotMindPlugin.Log?.LogDebug($"[{BotOwner?.name ?? "Unknown"}] LootContainerLogic started");
@@ -150,10 +156,15 @@ namespace Blackhorse311.BotMind.Modules.Looting
                 }
 
                 // Overall timeout: prevent being stuck on any single container forever
+                // v1.5.0 Fix: Log only once — without the guard this fires every frame
                 if (Time.time - _startTime > OVERALL_TIMEOUT)
                 {
-                    BotMindPlugin.Log?.LogWarning(
-                        $"[{BotOwner?.name ?? "Unknown"}] Container looting timed out after {OVERALL_TIMEOUT}s in state {_currentState}. Aborting.");
+                    if (!_hasTimedOut)
+                    {
+                        _hasTimedOut = true;
+                        BotMindPlugin.Log?.LogWarning(
+                            $"[{BotOwner?.name ?? "Unknown"}] Container looting timed out after {OVERALL_TIMEOUT}s in state {_currentState}. Aborting.");
+                    }
                     _currentState = State.Complete;
                     return;
                 }

@@ -117,12 +117,14 @@ namespace Blackhorse311.BotMind.Modules.Questing
 
         private void GeneratePMCObjectives()
         {
-            // Generate 2-4 exploration waypoints with path reachability validation
+            // v1.5.0 Fix: Graduated distance ranges — try far first, then medium, then close.
+            // The old 50-150m minimum frequently failed on complex maps (Woods, Interchange),
+            // causing all bots to fall back to spawn-centered exploration.
             int waypointCount = UnityEngine.Random.Range(2, 5);
             int successCount = 0;
             for (int i = 0; i < waypointCount; i++)
             {
-                Vector3 randomPoint = GetRandomNavMeshPoint(_bot.Position, 50f, 150f);
+                Vector3 randomPoint = GetRandomNavMeshPointGraduated(_bot.Position, isPMC: true);
                 if (randomPoint != Vector3.zero)
                 {
                     successCount++;
@@ -164,6 +166,30 @@ namespace Blackhorse311.BotMind.Modules.Questing
         }
 
         /// <summary>
+        /// v1.5.0 Fix: Graduated distance search — tries far distances first, then progressively
+        /// closer ranges. This dramatically improves waypoint success rate on complex maps
+        /// (Woods, Interchange, Reserve) where 50-150m minimum frequently failed NavMesh validation.
+        /// </summary>
+        private Vector3 GetRandomNavMeshPointGraduated(Vector3 origin, bool isPMC)
+        {
+            // Try each distance tier: far → medium → close
+            // PMCs range further, scavs stay closer
+            float[][] tiers = isPMC
+                ? new[] { new[] { 50f, 150f }, new[] { 20f, 60f }, new[] { 10f, 30f } }
+                : new[] { new[] { 30f, 100f }, new[] { 15f, 40f }, new[] { 8f, 20f } };
+
+            foreach (var tier in tiers)
+            {
+                Vector3 point = GetRandomNavMeshPoint(origin, tier[0], tier[1]);
+                if (point != Vector3.zero)
+                {
+                    return point;
+                }
+            }
+            return Vector3.zero;
+        }
+
+        /// <summary>
         /// Gets a random point on NavMesh within min/max range that has a valid path from origin.
         /// Returns Vector3.zero on failure.
         /// </summary>
@@ -199,7 +225,7 @@ namespace Blackhorse311.BotMind.Modules.Questing
             int successCount = 0;
             for (int i = 0; i < patrolPoints; i++)
             {
-                Vector3 patrolPoint = GetRandomNavMeshPoint(_bot.Position, 30f, 100f);
+                Vector3 patrolPoint = GetRandomNavMeshPointGraduated(_bot.Position, isPMC: false);
                 if (patrolPoint != Vector3.zero)
                 {
                     successCount++;

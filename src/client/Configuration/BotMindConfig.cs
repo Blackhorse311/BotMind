@@ -195,10 +195,12 @@ namespace Blackhorse311.BotMind.Configuration
                 "Enable the MedicBuddy summon feature");
 
             // v1.4.0: Combat alert duration — how long bots stay in fight mode after detecting an enemy
+            // v1.5.0 Fix: Reduced default from 30s to 15s — 30s kept bots in perpetual "combat"
+            // on active maps, preventing questing entirely (any enemy sense resets the timer)
             CombatAlertDuration = config.Bind(
                 "1. General",
                 "Combat Alert Duration",
-                30f,
+                15f,
                 new ConfigDescription(
                     "Seconds bots stay in combat mode after sensing an enemy. " +
                     "During this time, bots fight instead of questing/looting. " +

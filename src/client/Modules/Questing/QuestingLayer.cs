@@ -19,9 +19,11 @@ namespace Blackhorse311.BotMind.Modules.Questing
         private float _lastQuestUpdateTime;
         private const float UPDATE_INTERVAL = 5f;
 
-        // v1.4.0 Fix: Brief cooldown between objectives so bots look natural
+        // v1.5.0 Fix: Cooldown tracked internally — layer stays active during cooldown
+        // to prevent EFT's default brain from walking bots back to spawn
         private float _lastObjectiveCompleteTime;
-        private const float POST_OBJECTIVE_COOLDOWN = 5f;
+        private const float POST_OBJECTIVE_COOLDOWN = 3f;
+        private bool _inCooldown;
 
         // Track current logic for completion checking
         private GoToLocationLogic _goToLogic;
@@ -80,22 +82,21 @@ namespace Blackhorse311.BotMind.Modules.Questing
                     return false;
                 }
 
-                // v1.4.0 Fix: Brief cooldown between objectives so bots look natural
-                // Lets SAIN/vanilla AI run for a few seconds, creating organic pauses
-                if (Time.time - _lastObjectiveCompleteTime < POST_OBJECTIVE_COOLDOWN)
-                {
-                    return false;
-                }
+                // v1.5.0 Fix: Track cooldown internally but keep layer ACTIVE.
+                // Returning false during cooldown lets EFT's default brain take over,
+                // which walks bots back to spawn — the root cause of the "stuck" bug.
+                _inCooldown = Time.time - _lastObjectiveCompleteTime < POST_OBJECTIVE_COOLDOWN;
 
                 // Issue #1 Fix: Always update immediately when idle (prevents idle gaps).
                 // Only throttle to 5s when we already have an active objective.
-                if (!_questManager.HasActiveObjective || Time.time - _lastQuestUpdateTime > UPDATE_INTERVAL)
+                if (!_inCooldown && (!_questManager.HasActiveObjective || Time.time - _lastQuestUpdateTime > UPDATE_INTERVAL))
                 {
                     _lastQuestUpdateTime = Time.time;
                     _questManager.UpdateObjectives();
                 }
 
-                return _questManager.HasActiveObjective;
+                // Layer stays active during cooldown — GetNextAction handles the pause
+                return _inCooldown || _questManager.HasActiveObjective;
             }
             catch (Exception ex)
             {
@@ -110,6 +111,14 @@ namespace Blackhorse311.BotMind.Modules.Questing
             // Seventh Review Fix (Issue 4): Add try-catch to framework callback for consistency
             try
             {
+                // v1.5.0 Fix: During cooldown, explore locally instead of deactivating the layer.
+                // This keeps the layer active (preventing EFT brain takeover) while giving
+                // the bot a natural pause between objectives.
+                if (_inCooldown)
+                {
+                    return new Action(typeof(ExploreAreaLogic), "Pausing between objectives");
+                }
+
                 var objective = _questManager.GetCurrentObjective();
                 if (objective == null)
                 {
@@ -152,6 +161,15 @@ namespace Blackhorse311.BotMind.Modules.Questing
             // Healthcare Critical: Wrap framework callback in try-catch
             try
             {
+                // v1.5.0 Fix: If cooldown just ended, end the pause action so
+                // GetNextAction can pick the real next objective
+                if (!_inCooldown && _exploreLogic != null && _questManager.HasActiveObjective)
+                {
+                    // Cooldown ended and we have a real objective — switch from pause explore
+                    _exploreLogic = null;
+                    return true;
+                }
+
                 // Check if any logic reports complete
                 if (_goToLogic != null && _goToLogic.IsComplete)
                 {
@@ -268,10 +286,11 @@ namespace Blackhorse311.BotMind.Modules.Questing
             {
                 stringBuilder.AppendLine("BotMind Questing Layer");
                 stringBuilder.AppendLine($"  Has Objective: {_questManager?.HasActiveObjective ?? false}");
+                stringBuilder.AppendLine($"  In Cooldown: {_inCooldown}");
                 float cooldownLeft = POST_OBJECTIVE_COOLDOWN - (Time.time - _lastObjectiveCompleteTime);
                 if (cooldownLeft > 0f)
                 {
-                    stringBuilder.AppendLine($"  Cooldown: {cooldownLeft:F0}s");
+                    stringBuilder.AppendLine($"  Cooldown Left: {cooldownLeft:F1}s");
                 }
                 var obj = _questManager?.GetCurrentObjective();
                 if (obj != null)

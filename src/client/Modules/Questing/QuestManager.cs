@@ -104,14 +104,22 @@ namespace Blackhorse311.BotMind.Modules.Questing
         {
             var role = _bot.Profile?.Info?.Settings?.Role;
             bool isPMC = role == WildSpawnType.pmcUSEC || role == WildSpawnType.pmcBEAR;
+            bool isScav = role == WildSpawnType.assault || role == WildSpawnType.cursedAssault || role == WildSpawnType.marksman;
 
             if (isPMC)
             {
                 GeneratePMCObjectives();
             }
-            else
+            else if (isScav)
             {
                 GenerateScavObjectives();
+            }
+            else
+            {
+                // Defense-in-depth: IsActive() should filter unrecognized roles before we get here.
+                // If somehow reached, generate nothing so the layer deactivates cleanly.
+                BotMindPlugin.Log?.LogWarning(
+                    $"[{_bot?.name}] GenerateObjectives called for unrecognized role '{role}' — skipping");
             }
         }
 

@@ -177,7 +177,12 @@ namespace Blackhorse311.BotMind.Modules.Questing
                 Vector3 direction = (_targetPosition - BotOwner.Position).normalized;
                 Vector3 destination = _targetPosition - direction * 0.5f;
 
-                var pathResult = BotOwner.GoToPoint(destination, true, -1f, false, false, true, false, false);
+                // v1.6.0 Fix: lookToMovingDirection (5th param) changed from false to true.
+                // With both look params false, EFT's locomotion had no facing constraint — bots
+                // walked backwards. This is a one-time path hint (not a per-frame override like
+                // the old LookToMovingDirection() call removed in v1.2.0), so it doesn't block
+                // EFT's LookSensor from detecting enemies between path updates.
+                var pathResult = BotOwner.GoToPoint(destination, true, -1f, false, true, true, false, false);
 
                 if (pathResult != NavMeshPathStatus.PathComplete)
                 {
@@ -185,7 +190,7 @@ namespace Blackhorse311.BotMind.Modules.Questing
                     if (NavMesh.SamplePosition(_targetPosition, out NavMeshHit hit, 5f, NavMesh.AllAreas))
                     {
                         destination = hit.position;
-                        pathResult = BotOwner.GoToPoint(destination, true, -1f, false, false, true, false, false);
+                        pathResult = BotOwner.GoToPoint(destination, true, -1f, false, true, true, false, false);
                     }
 
                     if (pathResult != NavMeshPathStatus.PathComplete)

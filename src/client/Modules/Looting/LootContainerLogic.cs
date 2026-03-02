@@ -102,6 +102,11 @@ namespace Blackhorse311.BotMind.Modules.Looting
                 _hasTimedOut = false; // Reset timeout guard on start
                 _lastMoveDistance = float.MaxValue;
                 _noProgressCount = 0;
+                // Reset _target so the registration block in Update() always fires for a
+                // fresh action cycle. BigBrain reuses logic instances; without this reset
+                // the "if (_target == null)" guard is skipped, RegisterLogic() is never
+                // called, and IsCurrentActionEnding() on the layer never sees IsComplete.
+                _target = null;
                 BotMindPlugin.Log?.LogDebug($"[{BotOwner?.name ?? "Unknown"}] LootContainerLogic started");
             }
             catch (Exception ex)
@@ -252,7 +257,8 @@ namespace Blackhorse311.BotMind.Modules.Looting
                 Vector3 dir = (targetPos - BotOwner.Position).normalized;
                 Vector3 destination = targetPos - dir * 0.5f;
 
-                if (BotOwner.GoToPoint(destination, true, -1f, false, false, true, false, false) != NavMeshPathStatus.PathComplete)
+                // v1.6.0 Fix: lookToMovingDirection (5th param) true — prevents backwards walking
+                if (BotOwner.GoToPoint(destination, true, -1f, false, true, true, false, false) != NavMeshPathStatus.PathComplete)
                 {
                     _currentState = State.Complete;
                 }

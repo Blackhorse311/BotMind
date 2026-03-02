@@ -208,7 +208,8 @@ namespace Blackhorse311.BotMind.Modules.Questing
             {
                 _nextMoveTime = Time.time + MOVE_UPDATE_INTERVAL;
 
-                var pathResult = BotOwner.GoToPoint(_currentWaypoint, true, -1f, false, false, true, false, false);
+                // v1.6.0 Fix: lookToMovingDirection (5th param) true — prevents backwards walking
+                var pathResult = BotOwner.GoToPoint(_currentWaypoint, true, -1f, false, true, true, false, false);
                 if (pathResult != NavMeshPathStatus.PathComplete)
                 {
                     // Failed to path - select new waypoint

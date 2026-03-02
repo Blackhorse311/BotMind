@@ -266,7 +266,7 @@ All modules must integrate with SAIN:
 | Escort Difficulty Config | **COMPLETE** | Configurable BotDifficulty (0-3, default hard) for escort bots |
 | Medical Gear on Bots | **IN PROGRESS** | EquipBotWithMedicalGear() implemented but silently failing - see known issues |
 | Voice Lines + Notifications | **COMPLETE** | MedicBuddyNotifier (EN/RU) + MedicBuddyAudio with 60 voice lines |
-| Unit Tests | **COMPLETE** | 112 passing tests covering all modules |
+| Unit Tests | **COMPLETE** | 220 passing tests covering all modules |
 
 ### Code Review Status
 
@@ -279,7 +279,7 @@ See `docs/CODE_REVIEW_FIXES.md` for complete review history.
 
 ---
 
-## Known Issues (As of 2026-02-17)
+## Known Issues (As of 2026-03-02)
 
 ### Medical Gear Not Appearing on Bot Corpses
 - `EquipBotWithMedicalGear()` is implemented and builds clean, but runtime test showed NO "Equipped X medical items" success log messages
@@ -316,13 +316,32 @@ See `docs/CODE_REVIEW_FIXES.md` for complete review history.
 
 ---
 
+## Fixes Since Initial Release
+
+### v1.6.0 (2026-03-02) — GitHub Issue #10
+- **Loot hang fix:** Added action-level timeout (70s) in LootingLayer.IsCurrentActionEnding() as safety net for when logic references are lost. Also added `_target = null` reset to LootCorpseLogic.Start().
+- **Questing role allowlist:** Added explicit `if (!isPMC && !isScav) return false` in QuestingLayer.IsActive() — Raiders (brain "PMC", WildSpawnType.pmcBot) and Rogues no longer receive questing objectives. Defense-in-depth added to QuestManager.GenerateObjectives().
+- **Backwards walking fix:** Changed GoToPoint's `lookToMovingDirection` (5th param) from false to true in GoToLocationLogic, ExploreAreaLogic, LootContainerLogic, LootCorpseLogic. PickupItemLogic already had true.
+- 29 new tests (IssueFixTests.cs) — 220 total
+
+### v1.5.0 (2026-02-28) — GitHub Issue #9
+- Layer stays active during cooldown (prevents EFT brain walk-to-spawn)
+- Graduated waypoint generation (far→medium→close distance tiers)
+- Progressive exploration from current position
+- Looting timeout spam guard
+- CombatAlertDuration default 30s→15s
+
+### v1.1.0–v1.4.0
+- See README.md changelog for full history
+
+---
+
 ## Next Steps
 
 1. **Fix Medical Gear** - Re-run in SPT to see why EquipBotWithMedicalGear fails (now with visible warnings)
-2. **Second Runtime Test** - Verify 9th review fixes work in-game
-3. **Looting/Questing Runtime Test** - Test the other two modules in actual gameplay
-4. **SAIN Compatibility Testing** - Verify SAIN interop works correctly
-5. **Performance Profiling** - Measure actual per-frame overhead
-6. **Edge Case Testing** - Multiple summons, mid-raid spawns, player death during healing
-7. **Packaging** - LICENSE, README.md, distribution zip for SPT Forge
+2. **Runtime Test v1.6.0** - Verify Raiders don't quest, no backwards walking, loot hang resolved
+3. **SAIN Compatibility Testing** - Verify SAIN interop works correctly
+4. **Performance Profiling** - Measure actual per-frame overhead
+5. **Edge Case Testing** - Multiple summons, mid-raid spawns, player death during healing
+6. **ABPS + MedicBuddy Compatibility** - Investigate reported interaction (Capricorn)
 

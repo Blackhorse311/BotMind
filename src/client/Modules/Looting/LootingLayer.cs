@@ -36,6 +36,13 @@ namespace Blackhorse311.BotMind.Modules.Looting
         private LootContainerLogic _containerLogic;
         private PickupItemLogic _pickupLogic;
 
+        // v1.6.0 Fix: Action-level timeout as safety net for loot hang.
+        // If the logic's RegisterLogic() call is missed (e.g., BigBrain doesn't pass ActionData),
+        // the logic reference on the layer stays null and IsCurrentActionEnding() can't detect
+        // completion. This timeout catches that case without depending on the logic reference.
+        private float _currentActionStartTime;
+        private const float ACTION_TIMEOUT = 70f; // OVERALL_TIMEOUT (60s) + 10s buffer
+
         public LootingLayer(BotOwner botOwner, int priority) : base(botOwner, priority)
         {
             _lootFinder = new LootFinder(botOwner);
@@ -113,6 +120,7 @@ namespace Blackhorse311.BotMind.Modules.Looting
             try
             {
                 _currentTarget = _lootFinder.ClaimNextTarget();
+                _currentActionStartTime = Time.time;
                 if (_currentTarget == null)
                 {
                     return new Action(typeof(LootCorpseLogic), "No target");
@@ -151,7 +159,12 @@ namespace Blackhorse311.BotMind.Modules.Looting
             // Sixth Review Fix (Issue 102): Add try-catch to framework callback
             try
             {
-            // Check if the current logic is complete
+            // Check if the current logic is complete.
+            // Note: _*Logic references are set via RegisterLogic(), which is called from the
+            // first Update() frame of each action. If registration races or the logic instance
+            // is reused across cycles, the reference can be null while the logic has already
+            // finished. The null-check guards below are the primary path; the fallback at the
+            // end catches the degenerate case where IsComplete is true but no reference exists.
             if (_corpseLogic != null && _corpseLogic.IsComplete)
             {
                 _lootFinder.MarkCurrentTargetComplete();
@@ -169,6 +182,23 @@ namespace Blackhorse311.BotMind.Modules.Looting
             if (_pickupLogic != null && _pickupLogic.IsComplete)
             {
                 _lootFinder.MarkCurrentTargetComplete();
+                _pickupLogic = null;
+                RecordLootCompletion();
+                return true;
+            }
+
+            // v1.6.0 Fix: Action-level timeout as last-resort safety net.
+            // If the logic completed but RegisterLogic() was never called (null reference on layer),
+            // none of the IsComplete checks above will fire. Without this timeout the bot stays
+            // stuck until all loot targets expire — the root cause of the "state Complete" loot hang.
+            if (_currentActionStartTime > 0f && Time.time - _currentActionStartTime > ACTION_TIMEOUT)
+            {
+                BotMindPlugin.Log?.LogWarning(
+                    $"[{BotOwner?.name ?? "Unknown"}] Looting action timed out after {ACTION_TIMEOUT:F0}s — " +
+                    "forcing action end (logic reference may have been lost)");
+                _lootFinder.MarkCurrentTargetComplete();
+                _corpseLogic = null;
+                _containerLogic = null;
                 _pickupLogic = null;
                 RecordLootCompletion();
                 return true;

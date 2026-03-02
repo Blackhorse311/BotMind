@@ -136,7 +136,7 @@ Access mod settings via **F12** (BepInEx Configuration Manager) or edit the conf
 | Enable Looting | true | Master toggle for bot looting |
 | Enable Questing | true | Master toggle for bot questing |
 | Enable MedicBuddy | true | Master toggle for MedicBuddy |
-| Combat Alert Duration | 30s | How long bots stay in combat mode after sensing an enemy (10-120s). Higher = bots fight longer before returning to questing/looting. |
+| Combat Alert Duration | 15s | How long bots stay in combat mode after sensing an enemy (10-120s). Higher = bots fight longer before returning to questing/looting. |
 
 ### Looting
 
@@ -243,8 +243,11 @@ Press **F6** and select any other preset (e.g., "hard"). Your original SAIN sett
 | Medic getting stuck | Move to an open area and press **Y** to set a new CCP. |
 | Team bots not spawning | Check BepInEx console for errors. Ensure BigBrain is installed. |
 | Bots not looting | Verify looting is enabled. Check search radius and minimum value settings. |
+| Bots walking backwards | Update to v1.6.0+ — this was a movement facing bug fixed in v1.6.0. |
 | Bots walking past enemies | Activate the BotMind SAIN preset (F6 menu). Increase Combat Alert Duration in F12. Install Waypoints mod. |
 | Bots freezing or getting stuck | Install [Waypoints](https://forge.sp-tarkov.com/mods/DrakiaXYZ-Waypoints) — BotMind's navigation relies on improved NavMesh data. |
+| Raiders/Bloodhounds stuck on questing | Update to v1.6.0+ — non-PMC/Scav bots (Raiders, Rogues, Bloodhounds) are now excluded from questing. |
+| Bots stuck looting a container | Update to v1.6.0+ — action-level timeout now forces completion even when internal signals are lost. |
 | Bots looting too aggressively | Lower Search Radius (default 35m) and check session limit (3 targets per 2 minutes). |
 | SAIN features not working | SAIN is optional. Install SAIN 3.x for combat awareness and extraction. |
 
@@ -290,7 +293,7 @@ This mod meets all [SPT Forge Content Guidelines](https://forge.sp-tarkov.com/co
 - No obfuscation, no data collection
 - Comprehensive error handling throughout
 - Operational-only logging (no ASCII art, no credits, no links)
-- 171 unit tests, 9 code reviews
+- 220 unit tests, 9 code reviews
 
 ---
 
@@ -331,12 +334,29 @@ Together, we delivered:
 
 - **[Th3Kenix](https://github.com/Th3Kenix)** - Reported questing idle/stuck bug and PMC non-engagement ([#1](https://github.com/Blackhorse311/BotMind/issues/1))
 - **LO010OL** - Identified LootingBots compatibility question on SPT Forge
-- **ExcellentBug, wookie143, Legitimancer, DigitalB** - Reported bot movement and looting behavior issues that led to v1.4.0 improvements
+- **ExcellentBug, wookie143, Legitimancer** - Reported bot movement and looting behavior issues that led to v1.4.0 improvements
+- **[DigitalBurns](https://github.com/DigitalBurns)** - Reported questing stuck on Woods ([#9](https://github.com/Blackhorse311/BotMind/issues/9)) leading to v1.5.0 fixes, and loot hang + backwards walking ([#10](https://github.com/Blackhorse311/BotMind/issues/10)) leading to v1.6.0 fixes
+- **[ExcellentBugg](https://github.com/ExcellentBugg)** - Confirmed persistent questing standby bug ([#3](https://github.com/Blackhorse311/BotMind/issues/3))
+- **Guntero, simjounhax, alecontt** - Reported questing stuck behavior on SPT Forge that informed v1.5.0 investigation
 - **thesubnautica19881** - Confirmed FIKA compatibility
 
 ---
 
 ## Changelog
+
+### v1.6.0 (2026-03-02)
+- **Fix:** Bots no longer get stuck in "Complete" looting state — added action-level timeout safety net in LootingLayer and fixed missing `_target` reset in LootCorpseLogic ([#10](https://github.com/Blackhorse311/BotMind/issues/10))
+- **Fix:** Raiders and Rogues no longer receive questing objectives — explicit role allowlist prevents non-PMC/Scav bots from getting stuck on waypoints ([#10](https://github.com/Blackhorse311/BotMind/issues/10))
+- **Fix:** Bots no longer walk backwards — GoToPoint's `lookToMovingDirection` parameter enabled across all movement calls ([#10](https://github.com/Blackhorse311/BotMind/issues/10))
+- 29 new unit tests for role filtering, timeout safety, and movement fixes (220 total)
+
+### v1.5.0 (2026-02-28)
+- **Fix:** Bots no longer walk back to spawn between questing objectives — layer stays active during cooldown instead of deactivating and letting EFT's default brain take over ([#9](https://github.com/Blackhorse311/BotMind/issues/9))
+- **Fix:** Graduated waypoint generation — QuestManager now tries far→medium→close distance tiers instead of failing at a single range, dramatically improving success on complex maps (Woods, Interchange, Reserve)
+- **Fix:** Progressive exploration — ExploreAreaLogic generates waypoints from the bot's current position instead of a fixed spawn center, so bots actually spread out across the map
+- **Fix:** Looting timeout spam guard — timeout warnings now log once per cycle instead of every frame (was producing 110K+ log lines per minute)
+- **Fix:** CombatAlertDuration default reduced from 30s to 15s — 30s kept bots in perpetual combat mode on active maps
+- 20 new unit tests for questing fix validation (191 total)
 
 ### v1.4.0 (2026-02-21)
 - **Fix:** Bot movement speeds increased across all modules — bots now jog/sprint instead of creeping (GoToLocation, ExploreArea, LootContainer, FindItem, PlaceItem)

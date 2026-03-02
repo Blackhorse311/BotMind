@@ -66,6 +66,16 @@ namespace Blackhorse311.BotMind.Modules.Questing
                 // but bypassed the ScavsDoQuests config check, always questing regardless
                 bool isScav = role == WildSpawnType.assault || role == WildSpawnType.cursedAssault || role == WildSpawnType.marksman;
 
+                // v1.6.0 Fix: Explicit role allowlist. Brain name and WildSpawnType are different
+                // axes — Raiders have brain "PMC" but WildSpawnType.pmcBot, Rogues have brain
+                // "ExUsec" but WildSpawnType.exUsec. Without this guard, unrecognized roles fall
+                // through both config checks and receive questing objectives with bad waypoint
+                // distances, causing spawn-stuck loops (reported on Woods with Bloodhound/Raider bots).
+                if (!isPMC && !isScav)
+                {
+                    return false;
+                }
+
                 if (isPMC && !BotMindConfig.PMCsDoQuests.Value)
                 {
                     return false;

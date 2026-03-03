@@ -183,7 +183,16 @@ namespace Blackhorse311.BotMind.Modules.Questing
                 // Check if any logic reports complete
                 if (_goToLogic != null && _goToLogic.IsComplete)
                 {
-                    _questManager.MarkCurrentObjectiveComplete();
+                    // v1.7.0 Fix: Distinguish success from nav failure so QuestManager can
+                    // track consecutive failures and skip unreachable distance tiers
+                    if (_goToLogic.HasFailed)
+                    {
+                        _questManager.MarkCurrentObjectiveFailed();
+                    }
+                    else
+                    {
+                        _questManager.MarkCurrentObjectiveComplete();
+                    }
                     _goToLogic = null;
                     _lastObjectiveCompleteTime = Time.time;
                     return true;
@@ -269,6 +278,44 @@ namespace Blackhorse311.BotMind.Modules.Questing
             // Seventh Review Fix (Issue 142): Add try-catch to framework callback
             try
             {
+                // v1.7.0 Fix: Process completed logic BEFORE clearing references.
+                // When a higher-priority layer (Looting, SAIN combat) interrupts questing,
+                // Stop() is called before IsCurrentActionEnding() can detect the failure.
+                // Without this, GoToLogic nav failures are lost and _consecutiveNavFailures
+                // never increments past 1, preventing tier-skip from working (Bot47 loop).
+                if (_goToLogic != null && _goToLogic.IsComplete)
+                {
+                    if (_goToLogic.HasFailed)
+                    {
+                        _questManager.MarkCurrentObjectiveFailed();
+                    }
+                    else
+                    {
+                        _questManager.MarkCurrentObjectiveComplete();
+                    }
+                    _lastObjectiveCompleteTime = Time.time;
+                }
+                else if (_exploreLogic != null && _exploreLogic.IsComplete)
+                {
+                    _questManager.MarkCurrentObjectiveComplete();
+                    _lastObjectiveCompleteTime = Time.time;
+                }
+                else if (_extractLogic != null && _extractLogic.IsComplete)
+                {
+                    _questManager.MarkCurrentObjectiveComplete();
+                    _lastObjectiveCompleteTime = Time.time;
+                }
+                else if (_findItemLogic != null && _findItemLogic.IsComplete)
+                {
+                    _questManager.MarkCurrentObjectiveComplete();
+                    _lastObjectiveCompleteTime = Time.time;
+                }
+                else if (_placeItemLogic != null && _placeItemLogic.IsComplete)
+                {
+                    _questManager.MarkCurrentObjectiveComplete();
+                    _lastObjectiveCompleteTime = Time.time;
+                }
+
                 // v1.4.0 Fix: Reset pose/speed so SAIN/vanilla AI doesn't inherit our values
                 if (BotOwner != null)
                 {

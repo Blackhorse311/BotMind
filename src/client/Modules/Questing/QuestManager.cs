@@ -28,6 +28,11 @@ namespace Blackhorse311.BotMind.Modules.Questing
         // Cached NavMeshPath to avoid allocation per GetRandomNavMeshPoint call
         private readonly NavMeshPath _cachedNavPath = new NavMeshPath();
 
+        // v1.7.0 Fix: Track consecutive navigation failures to avoid regenerating unreachable
+        // waypoints in the same distance tier. When failures accumulate, skip far tiers.
+        private int _consecutiveNavFailures;
+        private const int NAV_FAILURE_TIER_SKIP_THRESHOLD = 2;
+
         /// <summary>Seventh Review Fix (Issue 194): Whether this bot has an active objective to pursue.</summary>
         public bool HasActiveObjective => _currentObjective != null;
         /// <summary>Seventh Review Fix (Issue 195): Whether the current objective has been marked complete.</summary>
@@ -96,6 +101,28 @@ namespace Blackhorse311.BotMind.Modules.Questing
             if (_currentObjective == null || _currentObjective.IsComplete)
             {
                 _currentObjective = SelectBestObjective();
+                IsCurrentObjectiveComplete = false;
+            }
+
+            // v1.7.0 Fix: Guaranteed fallback — if after generation + selection we STILL have
+            // no active objective, inject a local Explore. This prevents bots from going permanently
+            // idle when all generated waypoints pass NavMesh.CalculatePath() validation but fail
+            // at BotOwner.GoToPoint() runtime (different pathfinder, stricter constraints).
+            // Seen on Woods: Bot46/Bot48 exhausted all objectives, then stood still forever.
+            if (_currentObjective == null)
+            {
+                BotMindPlugin.Log?.LogWarning(
+                    $"[{_bot?.name}] No active objective after update — injecting local exploration fallback");
+                var fallback = new QuestObjective
+                {
+                    Type = QuestObjectiveType.Explore,
+                    Name = "Fallback Patrol",
+                    TargetPosition = _bot.Position,
+                    CompletionRadius = 30f,
+                    Priority = 45f
+                };
+                _objectives.Add(fallback);
+                _currentObjective = fallback;
                 IsCurrentObjectiveComplete = false;
             }
         }
@@ -177,6 +204,8 @@ namespace Blackhorse311.BotMind.Modules.Questing
         /// v1.5.0 Fix: Graduated distance search — tries far distances first, then progressively
         /// closer ranges. This dramatically improves waypoint success rate on complex maps
         /// (Woods, Interchange, Reserve) where 50-150m minimum frequently failed NavMesh validation.
+        /// v1.7.0 Fix: When consecutive nav failures exceed threshold, skip the far tier to avoid
+        /// regenerating unreachable waypoints at the same distance (Bot40 loop on Woods).
         /// </summary>
         private Vector3 GetRandomNavMeshPointGraduated(Vector3 origin, bool isPMC)
         {
@@ -186,9 +215,14 @@ namespace Blackhorse311.BotMind.Modules.Questing
                 ? new[] { new[] { 50f, 150f }, new[] { 20f, 60f }, new[] { 10f, 30f } }
                 : new[] { new[] { 30f, 100f }, new[] { 15f, 40f }, new[] { 8f, 20f } };
 
-            foreach (var tier in tiers)
+            // v1.7.0 Fix: Skip far tier(s) when recent nav failures indicate the bot is in
+            // an area where long-range waypoints are unreachable (e.g., isolated NavMesh zones).
+            // Each threshold hit skips one more tier, so 2 failures = skip far, 4 = skip medium too.
+            int tiersToSkip = _consecutiveNavFailures / NAV_FAILURE_TIER_SKIP_THRESHOLD;
+
+            for (int i = tiersToSkip; i < tiers.Length; i++)
             {
-                Vector3 point = GetRandomNavMeshPoint(origin, tier[0], tier[1]);
+                Vector3 point = GetRandomNavMeshPoint(origin, tiers[i][0], tiers[i][1]);
                 if (point != Vector3.zero)
                 {
                     return point;
@@ -296,7 +330,7 @@ namespace Blackhorse311.BotMind.Modules.Questing
             return _currentObjective;
         }
 
-        /// <summary>Seventh Review Fix (Issue 197): Marks the current objective as complete.</summary>
+        /// <summary>Seventh Review Fix (Issue 197): Marks the current objective as complete (successful).</summary>
         public void MarkCurrentObjectiveComplete()
         {
             if (_currentObjective != null)
@@ -304,10 +338,30 @@ namespace Blackhorse311.BotMind.Modules.Questing
                 _currentObjective.IsComplete = true;
                 IsCurrentObjectiveComplete = true;
                 _currentObjective = null;
+                // Reset nav failure counter on success — bot reached a waypoint normally
+                _consecutiveNavFailures = 0;
             }
             // Issue #1 Fix: Immediately select next objective so HasActiveObjective stays true.
             // Without this, the layer deactivates for up to 5 seconds between objectives,
             // causing bots to stand idle after reaching each waypoint.
+            UpdateObjectives();
+        }
+
+        /// <summary>
+        /// v1.7.0 Fix: Marks the current objective as failed due to navigation issues.
+        /// Tracks consecutive failures so waypoint generation can skip unreachable distance tiers.
+        /// </summary>
+        public void MarkCurrentObjectiveFailed()
+        {
+            if (_currentObjective != null)
+            {
+                _consecutiveNavFailures++;
+                BotMindPlugin.Log?.LogDebug(
+                    $"[{_bot?.name}] Objective '{_currentObjective.Name}' failed (nav failures: {_consecutiveNavFailures})");
+                _currentObjective.IsComplete = true;
+                IsCurrentObjectiveComplete = true;
+                _currentObjective = null;
+            }
             UpdateObjectives();
         }
 

@@ -233,6 +233,9 @@ namespace Blackhorse311.BotMind.Modules.Questing
 
         public bool IsComplete => _currentState == State.Complete || _currentState == State.Failed;
 
+        /// <summary>v1.7.0: Whether this logic ended due to navigation failure (not successful arrival).</summary>
+        public bool HasFailed => _currentState == State.Failed;
+
         public override void BuildDebugText(StringBuilder stringBuilder)
         {
             float distance = Vector3.Distance(BotOwner.Position, _targetPosition);

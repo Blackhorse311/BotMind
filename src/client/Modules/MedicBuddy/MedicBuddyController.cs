@@ -2,9 +2,14 @@ using Comfort.Common;
 using EFT;
 using EFT.HealthSystem;
 using EFT.InventoryLogic;
+using Newtonsoft.Json;
+using SPT.Common.Http;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.AI;
 using Blackhorse311.BotMind.Configuration;
@@ -24,23 +29,26 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
         public static MedicBuddyController Instance => _instance;
 
         private float _lastSummonTime = float.MinValue;
+        /// <summary>Active cooldown duration — set dynamically based on spawn outcome.</summary>
+        private float _activeCooldown;
         // Fifth Review Fix (Issue 57): Add lock for thread-safe team list access
         private readonly object _teamLock = new object();
         private readonly List<BotOwner> _activeTeam = new List<BotOwner>();
-        // Use Interlocked for _medicBot - don't need volatile when using Interlocked
-        // (Interlocked provides full memory barrier)
-        private BotOwner _medicBot;
+        // Review 10 Fix: Added volatile for thread-safe visibility of _medicBot reads
+        private volatile BotOwner _medicBot;
+        /// <summary>Shared BotsGroup for the MedicBuddy team, created by CreateMedicBuddyGroup callback.</summary>
+        private BotsGroup _medicBuddyGroup;
         private MedicBuddyState _state = MedicBuddyState.Idle;
         // Third Review Fix: Lock object for state machine thread safety
         private readonly object _stateLock = new object();
         private Player _player;
         private float _healingStartTime;
-        private readonly float _healingDuration = 15f;
+        private const float HEALING_DURATION = 15f;
         private float _nextHealTick;
         private float _retreatStartTime;
-        private int _pendingSpawns;
+        private volatile int _pendingSpawns;
         // Issue 1 Fix: Track event subscription state to prevent memory leaks
-        private bool _isSubscribedToSpawner;
+        private volatile bool _isSubscribedToSpawner;
 
         // Bug Fix: Store spawn position and player side for use in OnBotCreated callback
         private Vector3 _spawnPosition;
@@ -83,14 +91,29 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
         private const float RETREAT_DISTANCE = 50f;
         /// <summary>Maximum time to wait for bots to spawn before timing out (seconds).</summary>
         private const float SPAWN_TIMEOUT = 30f;
+        /// <summary>Short cooldown for failed spawns or early team wipes (seconds).</summary>
+        private const float SHORT_COOLDOWN = 15f;
+        /// <summary>Time threshold: team killed within this period gets short cooldown (seconds).</summary>
+        private const float EARLY_WIPE_THRESHOLD = 30f;
         /// <summary>Minimum time bots spend walking to the player before arrival can trigger (seconds).</summary>
         private const float MIN_APPROACH_TIME = 10f;
         /// <summary>Time bots spend setting up a defensive perimeter before healing begins (seconds).</summary>
         private const float PERIMETER_SETUP_TIME = 5f;
         /// <summary>Max time bots can spend trying to reach the player before being teleported (seconds).</summary>
         private const float MOVEMENT_TIMEOUT = 45f;
+        /// <summary>Max distance a bot can drift from the rally point before being teleported back (meters).
+        /// Prevents bots from following long NavMesh detours that take them far from the team.</summary>
+        private const float MAX_LEASH_DISTANCE = 50f;
         /// <summary>Max vertical distance between spawn candidate and player (prevents wrong-floor spawns).</summary>
         private const float MAX_SPAWN_HEIGHT_DIFF = 3f;
+        /// <summary>Radius of the circular spread pattern for bot spawn positions (meters).</summary>
+        private const float BOT_SPREAD_RADIUS = 3f;
+        /// <summary>Maximum search radius for NavMesh.SamplePosition when placing bots.</summary>
+        private const float SPAWN_NAVMESH_SAMPLE_RADIUS = 5f;
+        /// <summary>Timeout for the ActivateBot async call before aborting (seconds).</summary>
+        private const float ACTIVATE_BOT_TIMEOUT = 30f;
+        /// <summary>Duration of spawn invulnerability to survive until friendship registers (seconds).</summary>
+        private const float SPAWN_INVULNERABILITY_DURATION = 10f;
 
         // Medical item template IDs - well-known Tarkov item IDs that are stable across versions.
         // Medic bots carry better gear (IFAK, CMS) while shooters carry basic first aid (AI-2, bandage).
@@ -111,7 +134,19 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
         };
 
         private float _movingStartTime;
+
+        /// <summary>
+        /// Next time to re-apply friendship for all team bots. SSIF continuously marks
+        /// scav-type bots as enemies every frame, so we must continuously fight back.
+        /// Runs every FRIENDSHIP_REFRESH_INTERVAL seconds while the team is active.
+        /// </summary>
+        private float _nextFriendshipRefreshTime;
+        private const float FRIENDSHIP_REFRESH_INTERVAL = 0.5f;
         private float _defendingStartTime;
+        /// <summary>Next time to run team health/hostility checks (throttled to 1/sec).</summary>
+        private float _nextTeamCheckTime;
+        /// <summary>When the team fully entered the game (spawn complete → MovingToPlayer).</summary>
+        private float _teamDeployedTime;
         private bool _effectsCleared;
         private bool _playerWasProne;
         private bool _healingApplied;
@@ -126,6 +161,20 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
             Healing,
             Retreating,
             Despawning
+        }
+
+        /// <summary>
+        /// Client-side DTO matching the server's GenerateEscortRequest record.
+        /// Used only for JSON serialization to the /botmind/generate-escort endpoint.
+        /// </summary>
+        private class EscortRequest
+        {
+            public int Count { get; set; }
+            public string Side { get; set; }
+            public string Difficulty { get; set; }
+            public int PlayerLevel { get; set; }
+            public string Location { get; set; }
+            public string GameVersion { get; set; }
         }
 
         // Team tracking
@@ -228,8 +277,10 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
                     return;
                 }
 
-                // Check for summon input (Ctrl+Alt+F10 key combo via BepInEx KeyboardShortcut)
-                if (BotMindConfig.MedicBuddyKeybind.Value.IsDown())
+                // Check for summon input — manual modifier check so key order doesn't matter.
+                // BepInEx KeyboardShortcut.IsDown() requires modifiers pressed before the main key,
+                // which is unintuitive. This checks all keys are held simultaneously.
+                if (IsSummonKeybindPressed())
                 {
                     TrySummonMedicBuddy();
                 }
@@ -250,13 +301,49 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
             }
         }
 
+        /// <summary>
+        /// Check if the summon keybind is pressed, regardless of modifier key order.
+        /// BepInEx KeyboardShortcut.IsDown() requires modifiers BEFORE the main key,
+        /// which fails if the player presses F10 before Ctrl+Alt.
+        /// </summary>
+        private bool IsSummonKeybindPressed()
+        {
+            var shortcut = BotMindConfig.MedicBuddyKeybind.Value;
+            KeyCode mainKey = shortcut.MainKey;
+            if (mainKey == KeyCode.None) return false;
+
+            // Main key must be pressed THIS frame (not held from previous)
+            if (!Input.GetKeyDown(mainKey)) return false;
+
+            // All modifiers must be held (any order)
+            foreach (var modifier in shortcut.Modifiers)
+            {
+                if (!Input.GetKey(modifier)) return false;
+            }
+            return true;
+        }
+
         private void TrySummonMedicBuddy()
         {
-            // Check if on cooldown
-            float cooldown = BotMindConfig.MedicBuddyCooldown.Value;
+            bool verbose = BotMindConfig.VerboseLogging.Value;
+            if (verbose)
+                BotMindPlugin.Log?.LogInfo($"[MedicBuddy] TrySummon: state={CurrentState}, " +
+                    $"cooldown={_activeCooldown}s, timeSince={(Time.time - _lastSummonTime):F1}s");
+
+            // If currently spawning, tell player to wait (don't show misleading cooldown timer)
+            if (CurrentState == MedicBuddyState.Spawning)
+            {
+                if (verbose) BotMindPlugin.Log?.LogInfo("[MedicBuddy] Rejected: already spawning");
+                MedicBuddyNotifier.WarnSpawning();
+                return;
+            }
+
+            // Check if on cooldown — _activeCooldown is set dynamically based on outcome
+            float cooldown = _activeCooldown;
             if (Time.time - _lastSummonTime < cooldown)
             {
                 float remaining = cooldown - (Time.time - _lastSummonTime);
+                if (verbose) BotMindPlugin.Log?.LogInfo($"[MedicBuddy] Rejected: cooldown {remaining:F0}s remaining");
                 MedicBuddyNotifier.WarnCooldown(remaining);
                 return;
             }
@@ -287,10 +374,11 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
                 return;
             }
 
-            // Check if player has medical items to heal themselves
-            if (PlayerHasMedicalItems())
+            // Check if player's inventory can actually treat their current injuries.
+            // Food, water, painkillers, and wrong-type items don't count.
+            if (PlayerCanSelfHeal())
             {
-                BotMindPlugin.Log?.LogInfo("Cannot summon MedicBuddy - player has medical supplies");
+                BotMindPlugin.Log?.LogInfo("Cannot summon MedicBuddy - player has matching medical supplies for all injuries");
                 MedicBuddyNotifier.WarnHasMedicalSupplies();
                 return;
             }
@@ -302,9 +390,10 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
                 return;
             }
 
-            // Begin spawning
-            _lastSummonTime = Time.time;
+            // Begin spawning — cooldown starts now, duration set based on outcome
             SpawnMedicTeam();
+            _lastSummonTime = Time.time;
+            _activeCooldown = BotMindConfig.MedicBuddyCooldown.Value; // Full cooldown by default
         }
 
         /// <summary>
@@ -317,6 +406,7 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
             var currentState = CurrentState;
             if (currentState == MedicBuddyState.Idle || currentState == MedicBuddyState.Spawning)
             {
+                BotMindPlugin.Log?.LogWarning($"[MedicBuddy] CCP rejected: state={currentState}, pending={_pendingSpawns}");
                 MedicBuddyNotifier.WarnNoActiveTeam();
                 return;
             }
@@ -337,8 +427,77 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
             MedicBuddyNotifier.NotifyRallyPointSet();
         }
 
+        /// <summary>
+        /// Requests server-generated PMC profiles for the escort team.
+        /// Makes a synchronous HTTP POST to /botmind/generate-escort.
+        /// Synchronous is fine: the server runs on localhost so round-trip is sub-50ms,
+        /// and profile generation for 4 bots takes ~200ms.
+        /// Returns null if the request fails (caller falls back to SpawnBotByTypeForce).
+        /// </summary>
+        private Profile[] RequestEscortProfiles(int count, EPlayerSide playerSide, BotDifficulty difficulty)
+        {
+            try
+            {
+                string side = playerSide == EPlayerSide.Bear ? "bear" : "usec";
+                string diff = difficulty.ToString().ToLowerInvariant();
+                int playerLevel = _player?.Profile?.Info?.Level ?? 40;
+                string location = Singleton<GameWorld>.Instance?.LocationId ?? "";
+                var request = new EscortRequest
+                {
+                    Count = count,
+                    Side = side,
+                    Difficulty = diff,
+                    PlayerLevel = playerLevel,
+                    Location = location,
+                    GameVersion = ""
+                };
+
+                string requestJson = JsonConvert.SerializeObject(request);
+                string responseJson = RequestHandler.PostJson("/botmind/generate-escort", requestJson);
+
+                if (string.IsNullOrEmpty(responseJson))
+                {
+                    BotMindPlugin.Log?.LogWarning("[MedicBuddy] Empty response from escort endpoint");
+                    return null;
+                }
+
+                // Log first 500 chars of response for debugging deserialization issues
+                BotMindPlugin.Log?.LogInfo($"[MedicBuddy] Server response (first 500): {responseJson.Substring(0, Math.Min(500, responseJson.Length))}");
+
+                // Use EFT's JsonParserClass which has all the converters for Profile's nested
+                // types (InfoClass, ProfileInfoClass, etc.). Newtonsoft.Json.JsonConvert fails
+                // because Profile's constructors expect EFT-specific intermediate types.
+                var profiles = JsonParserClass.ParseJsonTo<Profile[]>(responseJson);
+                if (profiles == null || profiles.Length == 0)
+                {
+                    BotMindPlugin.Log?.LogWarning("[MedicBuddy] No profiles returned from escort endpoint");
+                    return null;
+                }
+
+                BotMindPlugin.Log?.LogInfo($"[MedicBuddy] Received {profiles.Length} PMC profiles from server");
+                return profiles;
+            }
+            catch (Exception ex)
+            {
+                // Log the full exception chain — TargetInvocationException wraps the real cause
+                var inner = ex.InnerException;
+                string details = inner != null
+                    ? $"{ex.Message} -> {inner.GetType().Name}: {inner.Message}\n{inner.StackTrace}"
+                    : $"{ex.Message}\n{ex.StackTrace}";
+                BotMindPlugin.Log?.LogWarning($"[MedicBuddy] Failed to request escort profiles: {details}");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Fire-and-forget: async void is intentional because TrySummonMedicBuddy is called
+        /// from Update() which cannot await. Errors are caught by the outer try-catch.
+        /// Cooldown is set optimistically by the caller; on failure, UpdateSpawning applies SHORT_COOLDOWN.
+        /// </summary>
         private void SpawnMedicTeam()
         {
+          try
+          {
             BotMindPlugin.Log?.LogInfo("Spawning MedicBuddy team...");
 
             int teamSize = BotMindConfig.MedicBuddyTeamSize.Value;
@@ -349,6 +508,7 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
                 _activeTeam.Clear();
             }
             _medicBot = null;
+            _medicBuddyGroup = null;
 
             // Calculate spawn position (behind player, out of sight)
             // Bug Fix: Store as field so OnBotCreated can teleport bots to this position
@@ -373,61 +533,233 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
                 return;
             }
 
-            // Subscribe to bot creation events
             var spawner = botGame.BotsController?.BotSpawner;
-            if (spawner != null)
-            {
-                // Issue 1 Fix: Track subscription state and use try-finally for cleanup
-                try
-                {
-                    // Bug Fix: Snapshot all existing bot IDs BEFORE subscribing to OnBotCreated.
-                    // This prevents capturing bots that were already spawning/queued by the game
-                    // (e.g., regular PMC waves) which would consume our _pendingSpawns slots.
-                    SnapshotExistingBots(spawner);
-
-                    spawner.OnBotCreated += OnBotCreated;
-                    _isSubscribedToSpawner = true;
-
-                    // Bug Fix: Spawn bots as the same WildSpawnType that matches the player's side.
-                    // Using WildSpawnType.assault (Scav) for a PMC player spawns HOSTILE bots.
-                    // PMC-side bots must use pmcUSEC or pmcBEAR to be friendly to the player.
-                    WildSpawnType spawnType;
-                    if (_playerSide == EPlayerSide.Usec)
-                        spawnType = WildSpawnType.pmcUSEC;
-                    else if (_playerSide == EPlayerSide.Bear)
-                        spawnType = WildSpawnType.pmcBEAR;
-                    else
-                        spawnType = WildSpawnType.assault; // Scav player gets Scav allies
-
-                    // Temporarily raise bot cap to allow MedicBuddy bots through
-                    BotLimitManager.BeginMedicBuddySpawn();
-
-                    BotDifficulty escortDifficulty = (BotDifficulty)BotMindConfig.MedicBuddyEscortDifficulty.Value;
-                    for (int i = 0; i < teamSize; i++)
-                    {
-                        spawner.SpawnBotByTypeForce(1, spawnType, escortDifficulty, new BotSpawnParams());
-                    }
-
-                    BotMindPlugin.Log?.LogInfo($"Requested spawn of {teamSize} MedicBuddy bots (type: {spawnType})");
-
-                    // Notify player that help has been requested
-                    int variant = MedicBuddyNotifier.NotifyHelpRequested(_player.Side);
-                    MedicBuddyAudio.Play("summon_request", variant, _player.Side);
-                }
-                catch (Exception ex)
-                {
-                    // Sixth Review Fix (Issue 100): Include stack trace in error log
-                    BotMindPlugin.Log?.LogError($"Failed to spawn MedicBuddy team: {ex.Message}\n{ex.StackTrace}");
-                    MedicBuddyNotifier.WarnSpawnFailed();
-                    BotLimitManager.EndMedicBuddySpawn();
-                    UnsubscribeFromSpawner();
-                    SetState(MedicBuddyState.Idle);
-                }
-            }
-            else
+            if (spawner == null)
             {
                 BotMindPlugin.Log?.LogWarning("BotSpawner not available");
                 SetState(MedicBuddyState.Idle);
+                return;
+            }
+
+            BotDifficulty escortDifficulty = (BotDifficulty)BotMindConfig.MedicBuddyEscortDifficulty.Value;
+
+            // Try server-generated PMC profiles first, fall back to legacy assault spawn.
+            Profile[] profiles = RequestEscortProfiles(teamSize, _playerSide, escortDifficulty);
+
+            if (profiles != null && profiles.Length > 0)
+            {
+                SpawnBotsFromProfiles(profiles, spawner, escortDifficulty);
+            }
+            else
+            {
+                FallbackToLegacySpawn(spawner, teamSize, escortDifficulty);
+            }
+          }
+          catch (Exception ex)
+          {
+            // Outer safety net: catches anything thrown before the inner try blocks.
+            BotMindPlugin.Log?.LogError($"[MedicBuddy] SpawnMedicTeam unhandled error: {ex.Message}\n{ex.StackTrace}");
+            BotLimitManager.EndMedicBuddySpawn();
+            UnsubscribeFromSpawner();
+            SetState(MedicBuddyState.Idle);
+          }
+        }
+
+        /// <summary>
+        /// Spawns escort bots using server-generated PMC profiles via IBotCreator.ActivateBot.
+        /// Each profile is wrapped in a BotCreationDataClass and activated individually.
+        /// The existing OnBotCreated event handler captures each bot (method_11 fires the event).
+        /// </summary>
+        private void SpawnBotsFromProfiles(Profile[] profiles, BotSpawner spawner, BotDifficulty difficulty)
+        {
+            try
+            {
+                // Subscribe to OnBotCreated — method_11 fires this event after ActivateBot,
+                // so our existing handler captures and configures each bot.
+                SnapshotExistingBots(spawner);
+                spawner.OnBotCreated += OnBotCreated;
+                _isSubscribedToSpawner = true;
+
+                BotLimitManager.BeginMedicBuddySpawn();
+
+                // Find the closest BotZone and CorePoint for spawn registration
+                BotZone zone = FindClosestZone(spawner, _spawnPosition);
+                if (zone == null)
+                {
+                    zone = spawner.AllBotZones?.FirstOrDefault();
+                }
+
+                if (zone == null)
+                {
+                    BotMindPlugin.Log?.LogWarning("[MedicBuddy] No BotZone available for ActivateBot");
+                    FallbackToLegacySpawn(spawner, profiles.Length, difficulty);
+                    return;
+                }
+
+                var botCreator = spawner.BotCreator;
+                var token = spawner.CancellationTokenSource.Token;
+                bool verbose = BotMindConfig.VerboseLogging.Value;
+
+                // Get CorePointId for spawn position registration (ABPS pattern)
+                int corePointId = 0;
+                try
+                {
+                    corePointId = Singleton<IBotGame>.Instance.BotsController
+                        .CoversData.GetClosest(_spawnPosition).CorePointInGame.Id;
+                }
+                catch
+                {
+                    BotMindPlugin.Log?.LogDebug("[MedicBuddy] Could not get CorePointId, using 0");
+                }
+
+                foreach (var profile in profiles)
+                {
+                    if (token.IsCancellationRequested) break;
+
+                    try
+                    {
+                        // CreateWithoutProfile skips server profile generation (which hangs for PMC types).
+                        // We inject our pre-fetched server profile instead.
+                        var profileData = new BotProfileDataClass(
+                            EPlayerSide.Savage,  // ABPS pattern: always Savage for BotProfileDataClass
+                            WildSpawnType.pmcUSEC,
+                            difficulty,
+                            0f,
+                            null);
+
+                        var creationData = BotCreationDataClass.CreateWithoutProfile(profileData);
+                        creationData.AddProfile(profile);
+                        creationData.AddPosition(_spawnPosition, corePointId);
+
+                        spawner.InSpawnProcess++;
+
+                        // The ActivateBot callback wraps method_11 which registers the bot with BotSpawner
+                        // (adds to Bots, increments AllBotsCount, fires OnBotCreated, sets die callback).
+                        var localData = creationData;
+                        botCreator.ActivateBot(
+                            creationData,
+                            zone,
+                            false,
+                            new Func<BotOwner, BotZone, BotsGroup>(CreateMedicBuddyGroup),
+                            new Action<BotOwner>(bot =>
+                                spawner.method_11(bot, localData, null, false, new Stopwatch())),
+                            token);
+
+                        if (verbose)
+                            BotMindPlugin.Log?.LogInfo($"[MedicBuddy] ActivateBot called for profile: {profile.Nickname}");
+                    }
+                    catch (Exception ex)
+                    {
+                        BotMindPlugin.Log?.LogWarning($"[MedicBuddy] ActivateBot failed for {profile.Nickname}: {ex.Message}");
+                    }
+                }
+
+                BotMindPlugin.Log?.LogInfo($"[MedicBuddy] Requested spawn of {profiles.Length} PMC escort bots via ActivateBot");
+
+                int variant = MedicBuddyNotifier.NotifyHelpRequested(_player.Side);
+                MedicBuddyAudio.Play("summon_request", variant, _player.Side);
+            }
+            catch (OperationCanceledException)
+            {
+                BotMindPlugin.Log?.LogInfo("[MedicBuddy] PMC spawn cancelled (raid ending)");
+                BotLimitManager.EndMedicBuddySpawn();
+                UnsubscribeFromSpawner();
+                SetState(MedicBuddyState.Idle);
+            }
+            catch (Exception ex)
+            {
+                BotMindPlugin.Log?.LogError($"[MedicBuddy] SpawnBotsFromProfiles failed: {ex.Message}\n{ex.StackTrace}");
+                MedicBuddyNotifier.WarnSpawnFailed();
+                BotLimitManager.EndMedicBuddySpawn();
+                UnsubscribeFromSpawner();
+                SetState(MedicBuddyState.Idle);
+            }
+        }
+
+        /// <summary>
+        /// Fallback spawn path using SpawnBotByTypeForce when server profiles are unavailable.
+        /// Creates assault-type bots (scav appearance) instead of real PMCs.
+        /// The OnBotCreated event handler captures and configures the bots.
+        /// </summary>
+        private void FallbackToLegacySpawn(BotSpawner spawner, int teamSize, BotDifficulty difficulty)
+        {
+            try
+            {
+                // Use the player's faction PMC type so escorts spawn as PMCs, not scavs.
+                // This relies on the game's profile pool having pmcUSEC/pmcBEAR profiles
+                // available (ABPS pre-loads these at raid start). Falls back to assault
+                // if PMC spawn hangs or fails.
+                var (spawnType, _) = GetSpawnTypeForSide(_playerSide);
+                BotMindPlugin.Log?.LogInfo($"[MedicBuddy] SpawnBotByTypeForce: count={teamSize}, type={spawnType}, diff={difficulty}");
+
+                // Only subscribe if not already subscribed (SpawnBotsFromProfiles may have already done it)
+                if (!_isSubscribedToSpawner)
+                {
+                    SnapshotExistingBots(spawner);
+                    spawner.OnBotCreated += OnBotCreated;
+                    _isSubscribedToSpawner = true;
+
+                    BotLimitManager.BeginMedicBuddySpawn();
+                }
+
+                _ = spawner.SpawnBotByTypeForce(teamSize, spawnType, difficulty, null);
+
+                BotMindPlugin.Log?.LogInfo($"Requested spawn of {teamSize} MedicBuddy bots (type: {spawnType})");
+
+                int variant = MedicBuddyNotifier.NotifyHelpRequested(_player.Side);
+                MedicBuddyAudio.Play("summon_request", variant, _player.Side);
+            }
+            catch (OperationCanceledException)
+            {
+                BotMindPlugin.Log?.LogInfo("[MedicBuddy] Fallback spawn cancelled (raid ending)");
+                BotLimitManager.EndMedicBuddySpawn();
+                UnsubscribeFromSpawner();
+                SetState(MedicBuddyState.Idle);
+            }
+            catch (Exception ex)
+            {
+                BotMindPlugin.Log?.LogError($"[MedicBuddy] Fallback spawn failed: {ex.Message}\n{ex.StackTrace}");
+                MedicBuddyNotifier.WarnSpawnFailed();
+                BotLimitManager.EndMedicBuddySpawn();
+                UnsubscribeFromSpawner();
+                SetState(MedicBuddyState.Idle);
+            }
+        }
+
+        /// <summary>
+        /// Group callback for ActivateBot. Creates a shared BotsGroup for all MedicBuddy bots.
+        /// First bot creates the group; subsequent bots join it.
+        /// </summary>
+        private BotsGroup CreateMedicBuddyGroup(BotOwner bot, BotZone zone)
+        {
+            try
+            {
+                // Thread-safe check-and-set: ActivateBot may invoke this callback
+                // concurrently for multiple bots in the group.
+                lock (_teamLock)
+                {
+                    if (_medicBuddyGroup != null)
+                        return _medicBuddyGroup;
+
+                    var botSpawner = Singleton<IBotGame>.Instance?.BotsController?.BotSpawner;
+                    if (botSpawner == null)
+                        throw new InvalidOperationException("BotSpawner unavailable during group creation");
+
+                    var botsGroup = new BotsGroup(
+                        zone, botSpawner.BotGame, bot, new List<BotOwner>(),
+                        botSpawner.DeadBodiesController, botSpawner.AllPlayers, true);
+
+                    botSpawner.Groups.Add(zone, bot.Profile.Info.Side, botsGroup, true);
+                    _medicBuddyGroup = botsGroup;
+
+                    BotMindPlugin.Log?.LogInfo($"[MedicBuddy] Created BotsGroup for team (side={bot.Profile.Info.Side})");
+                    return botsGroup;
+                }
+            }
+            catch (Exception ex)
+            {
+                BotMindPlugin.Log?.LogError($"[MedicBuddy] CreateMedicBuddyGroup error: {ex.Message}\n{ex.StackTrace}");
+                throw; // Let ActivateBot propagate to SpawnMedicTeam's catch for cleanup
             }
         }
 
@@ -491,6 +823,11 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
 
         private void OnBotCreated(BotOwner bot)
         {
+            bool verbose = BotMindConfig.VerboseLogging.Value;
+            if (verbose)
+                BotMindPlugin.Log?.LogInfo($"[MedicBuddy] OnBotCreated fired: {bot?.name ?? "null"}, " +
+                    $"role={bot?.Profile?.Info?.Settings?.Role}, id={bot?.GetInstanceID()}");
+
             // Fifth Review Fix (Issue 59): Use Interlocked for thread-safe pending spawns decrement
             // Sixth Review Fix (Issue 106): Read state with lock to prevent race condition
             MedicBuddyState currentState;
@@ -500,6 +837,9 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
             }
             if (currentState != MedicBuddyState.Spawning || _pendingSpawns <= 0)
             {
+                if (verbose)
+                    BotMindPlugin.Log?.LogInfo($"[MedicBuddy] Skipped {bot?.name}: " +
+                        $"state={currentState}, pending={_pendingSpawns}");
                 return;
             }
 
@@ -508,43 +848,43 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
             // slots, leaving actual team bots uncaptured.
             if (_preExistingBotIds.Contains(bot.GetInstanceID()))
             {
+                if (verbose)
+                    BotMindPlugin.Log?.LogInfo($"[MedicBuddy] Skipped {bot?.name}: pre-existing bot (id={bot.GetInstanceID()})");
                 return;
             }
 
-            // Bug Fix: Filter to only capture bots matching our spawn request type.
-            // Without this, ANY bot spawning during the window (enemy scavs, bosses, etc.)
-            // would be claimed as a team member.
+            // Role filter removed: SpawnBotByTypeForce creates different types depending on
+            // the map (assault on most maps, ruafMachinegunner on Ground Zero, etc.).
+            // The pre-existing bot snapshot is the primary defense against capturing wrong bots.
+            // Log the role for debugging but accept any bot that passed the snapshot check.
             var role = bot.Profile?.Info?.Settings?.Role;
-            bool isExpectedType;
-            if (_playerSide == EPlayerSide.Usec)
-                isExpectedType = role == WildSpawnType.pmcUSEC;
-            else if (_playerSide == EPlayerSide.Bear)
-                isExpectedType = role == WildSpawnType.pmcBEAR;
-            else
-                isExpectedType = role == WildSpawnType.assault;
+            if (verbose)
+                BotMindPlugin.Log?.LogInfo($"[MedicBuddy] Capturing {bot?.name}: role={role}");
 
-            if (!isExpectedType)
-            {
-                return;
-            }
+            // Spawn invulnerability: set damage coefficient to 0 IMMEDIATELY so hostile AI
+            // can't kill the bot before friendship is registered. SAIN-enhanced bots on open
+            // maps (Woods) can detect and kill scav-type bots within milliseconds of spawn.
+            // Restored after SPAWN_INVULNERABILITY_DURATION seconds via RestoreVulnerability().
+            ApplySpawnInvulnerability(bot);
 
-            // Bug Fix: Teleport bot to calculated spawn position behind the player.
-            // SpawnBotByTypeForce uses default spawn points, so bots appear at random map locations.
+            // Fallback teleport: AddPosition in SpawnMedicTeam sets the spawn location,
+            // but if the bot appeared elsewhere (zone override, spawn system quirk),
+            // snap it to our calculated position as a safety net.
             if (_spawnPosition != Vector3.zero)
             {
                 try
                 {
-                    // Spread bots around the spawn point using angles instead of linear offset
                     int currentTeamCount;
                     lock (_teamLock)
                     {
                         currentTeamCount = _activeTeam.Count;
                     }
-                    float spreadAngle = currentTeamCount * 90f;
+                    int totalTeamSize = BotMindConfig.MedicBuddyTeamSize.Value;
+                    float spreadAngle = currentTeamCount * (360f / totalTeamSize);
                     Vector3 spreadDir = Quaternion.Euler(0f, spreadAngle, 0f) * Vector3.forward;
-                    Vector3 targetPos = _spawnPosition + spreadDir * 3f;
+                    Vector3 targetPos = _spawnPosition + spreadDir * BOT_SPREAD_RADIUS;
 
-                    if (NavMesh.SamplePosition(targetPos, out NavMeshHit hit, 5f, NavMesh.AllAreas) &&
+                    if (NavMesh.SamplePosition(targetPos, out NavMeshHit hit, SPAWN_NAVMESH_SAMPLE_RADIUS, NavMesh.AllAreas) &&
                         Mathf.Abs(hit.position.y - _spawnPosition.y) <= MAX_SPAWN_HEIGHT_DIFF)
                     {
                         bot.Transform.position = hit.position;
@@ -553,11 +893,11 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
                     {
                         bot.Transform.position = _spawnPosition;
                     }
-                    BotMindPlugin.Log?.LogInfo($"[{bot.name}] Teleported to spawn at {bot.Transform.position}");
+                    BotMindPlugin.Log?.LogInfo($"[{bot.name}] Positioned at {bot.Transform.position}");
                 }
                 catch (Exception ex)
                 {
-                    BotMindPlugin.Log?.LogDebug($"[{bot.name}] Could not teleport to spawn position: {ex.Message}");
+                    BotMindPlugin.Log?.LogDebug($"[{bot.name}] Could not position bot: {ex.Message}");
                 }
             }
 
@@ -573,20 +913,23 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
             MakeBotFriendlyToPlayer(bot);
             MakeTeamBotsFriendly(bot);
 
+            // Trigger an immediate friendship refresh on the next Update frame.
+            // SSIF will override our friendship, but the continuous refresh loop
+            // will fight back every 0.5s from now on.
+            _nextFriendshipRefreshTime = Time.time + 0.1f;
+
             int remaining = Interlocked.Decrement(ref _pendingSpawns);
 
-            // Seventh Review Fix (Issue 3): Thread-safe medic assignment using Interlocked.CompareExchange
-            // This prevents race condition where multiple bots spawning simultaneously could both
-            // see _medicBot as null and both try to become the medic
-            BotOwner previousMedic = Interlocked.CompareExchange(ref _medicBot, bot, null);
-            if (previousMedic == null)
+            // Medic assignment: OnBotCreated runs on the main thread, so a simple null
+            // check is sufficient — no concurrent access to _medicBot here.
+            if (_medicBot == null)
             {
-                // This thread successfully assigned the medic (was null, now this bot)
-                BotMindPlugin.Log?.LogDebug($"[{bot.name}] Assigned as MedicBuddy medic");
+                _medicBot = bot;
+                BotMindPlugin.Log?.LogInfo($"[{bot.name}] Assigned as MedicBuddy medic (pending={remaining})");
             }
             else
             {
-                BotMindPlugin.Log?.LogDebug($"[{bot.name}] Assigned as MedicBuddy shooter");
+                BotMindPlugin.Log?.LogInfo($"[{bot.name}] Assigned as MedicBuddy shooter (pending={remaining})");
             }
 
             // Equip the bot with medical items so the player can loot their corpse
@@ -613,6 +956,7 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
 
                 SetState(MedicBuddyState.MovingToPlayer);
                 _movingStartTime = Time.time;
+                _teamDeployedTime = Time.time;
 
                 // Notify player that team is en route and carries medical supplies
                 int variant = MedicBuddyNotifier.NotifyHelpEnRoute(_player.Side);
@@ -659,6 +1003,91 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
                 BotMindPlugin.Log?.LogWarning(
                     $"[{bot.name}] Failed to set friendly status: {ex.Message}\n{ex.StackTrace}");
             }
+        }
+
+        /// <summary>
+        /// Makes a bot invulnerable by setting its damage coefficient to 0.
+        /// This prevents hostile AI from killing team bots in the milliseconds between
+        /// spawn and friendship registration. Vulnerability is restored after a delay
+        /// by scheduling RestoreVulnerability via Invoke.
+        /// </summary>
+        private void ApplySpawnInvulnerability(BotOwner bot)
+        {
+            try
+            {
+                var player = bot.GetPlayer;
+                player?.ActiveHealthController?.SetDamageCoeff(0f);
+                BotMindPlugin.Log?.LogInfo($"[{bot.name}] Spawn invulnerability applied (DamageCoeff=0)");
+
+                // Schedule vulnerability restore. Use MonoBehaviour.Invoke for simplicity —
+                // we store the bot reference in a closure via StartCoroutine alternative.
+                // Since we can't pass args to Invoke, use a tracking dictionary.
+                _invulnerableBots[bot.GetInstanceID()] = (bot, Time.time + SPAWN_INVULNERABILITY_DURATION);
+            }
+            catch (Exception ex)
+            {
+                BotMindPlugin.Log?.LogDebug($"[{bot.name}] Could not apply spawn invulnerability: {ex.Message}");
+            }
+        }
+
+        /// <summary>Bots with active spawn invulnerability: (bot, expireTime).</summary>
+        private readonly List<(BotOwner bot, float expireTime)> _invulnerableBots
+            = new List<(BotOwner, float)>(8);
+
+        /// <summary>
+        /// Called from Update to restore vulnerability for bots whose protection has expired.
+        /// Uses the bot's original DamageCoeff from its settings file.
+        /// </summary>
+        private void UpdateSpawnInvulnerability()
+        {
+            if (_invulnerableBots.Count == 0) return;
+
+            float now = Time.time;
+            for (int i = _invulnerableBots.Count - 1; i >= 0; i--)
+            {
+                var (bot, expireTime) = _invulnerableBots[i];
+                if (now < expireTime) continue;
+
+                _invulnerableBots.RemoveAt(i);
+                try
+                {
+                    if (bot == null || bot.IsDead) continue;
+                    // Restore the bot's normal damage coefficient from its settings
+                    float normalCoeff = bot.Settings?.FileSettings?.Core?.DamageCoeff ?? 1f;
+                    bot.GetPlayer?.ActiveHealthController?.SetDamageCoeff(normalCoeff);
+                    BotMindPlugin.Log?.LogInfo($"[{bot.name}] Spawn invulnerability expired (DamageCoeff={normalCoeff})");
+                }
+                catch (Exception ex)
+                {
+                    BotMindPlugin.Log?.LogDebug($"Could not restore vulnerability: {ex.Message}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Re-applies friendship for all team bots. Called on a short delay after
+        /// OnBotCreated to override SameSideIsFriendly (SSIF) which marks scav-type
+        /// bots as enemies after our initial friendship call.
+        /// </summary>
+        private void RefreshTeamFriendship()
+        {
+            List<BotOwner> teamSnapshot = GetTeamSnapshot();
+            int refreshed = 0;
+            foreach (var bot in teamSnapshot)
+            {
+                if (bot == null || bot.IsDead) continue;
+                MakeBotFriendlyToPlayer(bot);
+                refreshed++;
+            }
+
+            // Also refresh inter-team friendship
+            foreach (var bot in teamSnapshot)
+            {
+                if (bot == null || bot.IsDead) continue;
+                MakeTeamBotsFriendly(bot);
+            }
+
+            BotMindPlugin.Log?.LogDebug($"[MedicBuddy] Refreshed friendship for {refreshed} team bots (post-SSIF)");
         }
 
         /// <summary>
@@ -832,9 +1261,7 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
         private static bool TryAddItemToEquipmentGrid(BotOwner bot, InventoryController inventoryController, Item item)
         {
             var equipment = inventoryController.Inventory.Equipment;
-            var slotsToCheck = new[] { EquipmentSlot.TacticalVest, EquipmentSlot.Backpack, EquipmentSlot.Pockets };
-
-            foreach (var slotType in slotsToCheck)
+            foreach (var slotType in EQUIPMENT_GRID_SLOTS)
             {
                 var slot = equipment.GetSlot(slotType);
                 if (slot.ContainedItem == null) continue;
@@ -868,6 +1295,12 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
         /// <summary>Distances to try for spawn position. Keep close to the player's known-safe area
         /// to avoid minefields and out-of-bounds zones on map edges.</summary>
         private static readonly float[] SPAWN_DISTANCES = { 20f, 15f, 25f, 12f };
+        /// <summary>Close-range distances for Pass 3 (very close behind player).</summary>
+        private static readonly float[] SPAWN_DISTANCES_CLOSE = { 10f, 8f };
+        /// <summary>Emergency distances for Pass 4 (any direction, ignoring FOV).</summary>
+        private static readonly float[] SPAWN_DISTANCES_EMERGENCY = { 10f, 8f, 5f };
+        /// <summary>Equipment grid slots to check when adding items to a bot's inventory.</summary>
+        private static readonly EquipmentSlot[] EQUIPMENT_GRID_SLOTS = { EquipmentSlot.TacticalVest, EquipmentSlot.Backpack, EquipmentSlot.Pockets };
         /// <summary>Approximate half-angle of player's field of view (degrees).</summary>
         private const float PLAYER_FOV_HALF = 63f;
 
@@ -884,6 +1317,91 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
             forward.y = 0f;
             float angle = Vector3.Angle(forward, toCandidate);
             return angle > PLAYER_FOV_HALF;
+        }
+
+        /// <summary>
+        /// Single source of truth for mapping player faction to bot spawn type.
+        /// Used by both SpawnMedicTeam (to create profiles) and OnBotCreated (to filter).
+        /// </summary>
+        private static (WildSpawnType spawnType, EPlayerSide spawnSide) GetSpawnTypeForSide(EPlayerSide playerSide)
+        {
+            switch (playerSide)
+            {
+                case EPlayerSide.Usec: return (WildSpawnType.pmcUSEC, EPlayerSide.Usec);
+                case EPlayerSide.Bear: return (WildSpawnType.pmcBEAR, EPlayerSide.Bear);
+                default: return (WildSpawnType.assault, EPlayerSide.Savage);
+            }
+        }
+
+        /// <summary>
+        /// Returns the BotZone closest to <paramref name="position"/>, or null if none found.
+        /// </summary>
+        private static BotZone FindClosestZone(BotSpawner spawner, Vector3 position)
+        {
+            BotZone closest = null;
+            float closestDist = float.MaxValue;
+            var allZones = spawner?.AllBotZones;
+            if (allZones == null) return null;
+
+            foreach (var z in allZones)
+            {
+                if (z == null) continue;
+                float dist = (z.transform.position - position).sqrMagnitude;
+                if (dist < closestDist)
+                {
+                    closestDist = dist;
+                    closest = z;
+                }
+            }
+            return closest;
+        }
+
+        /// <summary>
+        /// Gets zone names sorted by distance to the given position.
+        /// Returns up to <paramref name="count"/> unique zones so each bot spawns
+        /// in a different zone, avoiding ABPS's per-zone scav cap.
+        /// The bot is teleported to _spawnPosition in OnBotCreated anyway,
+        /// so the zone only needs to be valid, not optimal.
+        /// </summary>
+        private static List<string> GetZoneNamesSortedByDistance(BotSpawner spawner, Vector3 position, int count)
+        {
+            var result = new List<string>();
+            try
+            {
+                var zones = spawner?.AllBotZones;
+                if (zones == null)
+                {
+                    result.Add("");
+                    return result;
+                }
+
+                // Build list of (name, distance) pairs
+                var zoneDistances = new List<(string name, float dist)>();
+                foreach (var zone in zones)
+                {
+                    if (zone == null || string.IsNullOrEmpty(zone.NameZone)) continue;
+                    float dist = (zone.transform.position - position).sqrMagnitude;
+                    zoneDistances.Add((zone.NameZone, dist));
+                }
+
+                // Sort by distance (closest first)
+                zoneDistances.Sort((a, b) => a.dist.CompareTo(b.dist));
+
+                // Take up to count unique zones
+                for (int i = 0; i < zoneDistances.Count && result.Count < count; i++)
+                {
+                    result.Add(zoneDistances[i].name);
+                }
+            }
+            catch
+            {
+                // Fallback
+            }
+
+            if (result.Count == 0)
+                result.Add("");
+
+            return result;
         }
 
         private Vector3 CalculateSpawnPosition()
@@ -917,7 +1435,7 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
             }
 
             // Pass 3: Very close behind player (8-10m), out of FOV
-            foreach (float distance in new float[] { 10f, 8f })
+            foreach (float distance in SPAWN_DISTANCES_CLOSE)
             {
                 foreach (float angle in SPAWN_ANGLES_BEHIND)
                 {
@@ -929,7 +1447,7 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
             // Pass 4: Any direction with path, ignoring FOV (player may be in a corner)
             for (float angle = 0f; angle < 360f; angle += 30f)
             {
-                foreach (float distance in new float[] { 10f, 8f, 5f })
+                foreach (float distance in SPAWN_DISTANCES_EMERGENCY)
                 {
                     Vector3 candidate = TrySpawnCandidate(playerPos, playerForward, angle, distance, false);
                     if (candidate != Vector3.zero)
@@ -977,17 +1495,37 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
 
         private void UpdateStateMachine()
         {
-            // Clean up dead bots from the team
-            CleanupDeadBots();
-
-            // Detect if another mod (e.g., SameSideIsFriendly teamkill) flipped our bots hostile
-            CheckTeamHostility();
+            // Review 10 Fix: Throttle team checks to 1/sec (was every frame with lambda allocations)
+            if (Time.time >= _nextTeamCheckTime)
+            {
+                _nextTeamCheckTime = Time.time + 1f;
+                CleanupDeadBots();
+                CheckTeamHostility();
+            }
 
             // Fifth Review Fix (Issue 55): Read state with lock to prevent race condition
             MedicBuddyState currentState;
             lock (_stateLock)
             {
                 currentState = _state;
+            }
+
+            // Check and restore vulnerability for bots whose invulnerability expired
+            UpdateSpawnInvulnerability();
+
+            // Continuously re-apply friendship while team is active.
+            // Scav-type bots need this because SSIF and EFT default AI mark them hostile.
+            // PMC-type bots generally don't need it but it's harmless as a safety net.
+            if (currentState != MedicBuddyState.Idle &&
+                Time.time >= _nextFriendshipRefreshTime)
+            {
+                int teamCount;
+                lock (_teamLock) { teamCount = _activeTeam.Count; }
+                if (teamCount > 0)
+                {
+                    _nextFriendshipRefreshTime = Time.time + FRIENDSHIP_REFRESH_INTERVAL;
+                    RefreshTeamFriendship();
+                }
             }
 
             switch (currentState)
@@ -1063,10 +1601,27 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
                     return;
                 }
 
-                // No bots left to promote - clean up
+                // No bots left to promote - clean up with tiered cooldown
                 if (currentState != MedicBuddyState.Idle)
                 {
-                    BotMindPlugin.Log?.LogInfo("All MedicBuddy team members lost");
+                    float timeSinceDeployed = Time.time - _teamDeployedTime;
+                    if (timeSinceDeployed < EARLY_WIPE_THRESHOLD)
+                    {
+                        // Team wiped within 30s — short cooldown, they barely had a chance
+                        _activeCooldown = SHORT_COOLDOWN;
+                        _lastSummonTime = Time.time;
+                        BotMindPlugin.Log?.LogInfo($"MedicBuddy team wiped early ({timeSinceDeployed:F0}s) — short cooldown");
+                        MedicBuddyNotifier.WarnTeamWipedEarly();
+                    }
+                    else
+                    {
+                        // Team survived 30s+ — full cooldown applies
+                        BotMindPlugin.Log?.LogInfo($"MedicBuddy team wiped after {timeSinceDeployed:F0}s — full cooldown");
+                        MedicBuddyNotifier.WarnTeamWiped();
+                    }
+
+                    RestorePlayerStance();
+                    BotLimitManager.OnMedicBuddyDespawned();
                     SetState(MedicBuddyState.Idle);
                 }
             }
@@ -1137,10 +1692,14 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
                 {
                     if (bot.BotsGroup != null && bot.BotsGroup.IsEnemy(playerAsIPlayer))
                     {
-                        BotMindPlugin.Log?.LogWarning(
-                            $"MedicBuddy bot [{bot.name}] became hostile to player - aborting mission");
-                        SetState(MedicBuddyState.Despawning);
-                        return;
+                        // Re-apply friendship instead of aborting. Scav-type bots get
+                        // continuously marked hostile by SSIF and EFT default AI.
+                        // The continuous refresh loop handles steady-state, but this
+                        // catches hostility between refresh intervals.
+                        MakeBotFriendlyToPlayer(bot);
+                        if (BotMindConfig.VerboseLogging.Value)
+                            BotMindPlugin.Log?.LogInfo(
+                                $"[MedicBuddy] Fixed hostility for [{bot.name}]");
                     }
                 }
                 catch (Exception ex)
@@ -1173,9 +1732,15 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
                     // Partial team spawned - proceed anyway
                     SetState(MedicBuddyState.MovingToPlayer);
                     _movingStartTime = Time.time;
+                    _teamDeployedTime = Time.time;
                 }
                 else
                 {
+                    // No bots spawned — apply short cooldown so player can retry quickly
+                    _activeCooldown = SHORT_COOLDOWN;
+                    _lastSummonTime = Time.time;
+                    MedicBuddyNotifier.WarnSpawnFailed();
+                    BotMindPlugin.Log?.LogWarning("MedicBuddy spawn failed — no bots entered the game. Short cooldown applied.");
                     SetState(MedicBuddyState.Idle);
                 }
             }
@@ -1215,6 +1780,18 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
                 }
 
                 float distance = Vector3.Distance(bot.Position, targetPos);
+
+                // Leash check: if a bot drifted too far (bad NavMesh path, stuck on geometry),
+                // teleport them back immediately instead of waiting for MOVEMENT_TIMEOUT.
+                // This prevents one lost bot from blocking the entire team for 45 seconds.
+                if (distance > MAX_LEASH_DISTANCE)
+                {
+                    BotMindPlugin.Log?.LogWarning(
+                        $"[MedicBuddy] {bot.name} exceeded leash distance ({distance:F0}m > {MAX_LEASH_DISTANCE}m) - teleporting");
+                    TeleportBotNearPlayer(bot);
+                    continue;
+                }
+
                 if (distance > ARRIVAL_DISTANCE)
                 {
                     // If movement timed out, teleport stuck bots to a NavMesh position near the target
@@ -1312,6 +1889,22 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
                 return;
             }
 
+            // Leash check during defending: teleport back any bot that drifted too far
+            // (e.g., chasing an enemy or following a bad NavMesh path)
+            Vector3 rallyPos = RallyPoint;
+            List<BotOwner> defendSnapshot = GetTeamSnapshot();
+            foreach (var bot in defendSnapshot)
+            {
+                if (bot == null || bot.IsDead || bot.BotState != EBotState.Active) continue;
+                float dist = Vector3.Distance(bot.Position, rallyPos);
+                if (dist > MAX_LEASH_DISTANCE)
+                {
+                    BotMindPlugin.Log?.LogWarning(
+                        $"[MedicBuddy] {bot.name} exceeded leash during defend ({dist:F0}m) - teleporting");
+                    TeleportBotNearPlayer(bot);
+                }
+            }
+
             // Wait for perimeter setup before medic starts healing
             if (Time.time - _defendingStartTime < PERIMETER_SETUP_TIME)
             {
@@ -1345,10 +1938,40 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
             try { _player.MovementContext.IsInPronePose = true; }
             catch (Exception ex) { BotMindPlugin.Log?.LogWarning($"[MedicBuddy] Could not force prone: {ex.Message}"); }
 
+            // v1.8.0: Trigger native bot-to-bot healing for stimulator animation.
+            // This gives visual feedback (medic applies stimulator) while our ApplyHealing()
+            // handles the actual incremental healing. If native system also calls RestoreFullHealth(),
+            // our system will find nothing left to heal and complete early — no conflict.
+            TryNativeHealAsk();
+
             // Voice line plays immediately on arrival
             BotMindPlugin.Log?.LogInfo("MedicBuddy starting healing - player forced prone, medic preparing");
             int variant = MedicBuddyNotifier.NotifyHealingStarted(_player.Side);
             MedicBuddyAudio.Play("healing_start", variant, _player.Side);
+        }
+
+        /// <summary>
+        /// v1.8.0: Trigger EFT's native bot-to-bot healing system for stimulator animation.
+        /// Falls back silently if the medic bot has no stimulators or the system isn't available.
+        /// </summary>
+        private void TryNativeHealAsk()
+        {
+            try
+            {
+                var healTarget = _medicBot?.HealAnotherTarget;
+                if (healTarget == null)
+                {
+                    BotMindPlugin.Log?.LogDebug("[MedicBuddy] Native HealAnotherTarget not available — using custom healing only");
+                    return;
+                }
+
+                healTarget.HealAsk(_player);
+                BotMindPlugin.Log?.LogInfo("[MedicBuddy] Native HealAsk triggered for stimulator animation");
+            }
+            catch (Exception ex)
+            {
+                BotMindPlugin.Log?.LogDebug($"[MedicBuddy] Native HealAsk failed (expected if no meds): {ex.Message}");
+            }
         }
 
         private void UpdateHealing()
@@ -1395,7 +2018,7 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
             }
 
             // Safety: overall duration cap (prep + healing + buffer)
-            if (elapsed > HEAL_PREP_DELAY + _healingDuration + HEAL_COMPLETE_DELAY + 5f)
+            if (elapsed > HEAL_PREP_DELAY + HEALING_DURATION + HEAL_COMPLETE_DELAY + 5f)
             {
                 RestorePlayerStance();
                 BotMindPlugin.Log?.LogInfo("[MedicBuddy] Healing timed out - retreating");
@@ -1464,58 +2087,230 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
         }
 
         /// <summary>
-        /// Checks if the player has medical items in their inventory that could be used to self-heal.
-        /// Scans backpack, tactical vest, and pockets for any MedsItemClass items
-        /// (medkits, bandages, splints, stimulators, etc.).
+        /// Smart medical check: determines if the player's inventory contains items
+        /// that can actually treat their current injuries. Food, water, stimulators,
+        /// and painkillers do NOT count. A splint won't help a heavy bleed. Only blocks
+        /// MedicBuddy if the player has a matching treatment for EVERY active condition.
         /// </summary>
-        private bool PlayerHasMedicalItems()
+        private bool PlayerCanSelfHeal()
         {
             try
             {
+                var activeHC = _player?.ActiveHealthController;
+                if (activeHC == null) return false; // can't check, allow summon
+
+                // --- Phase 1: Detect player's current injuries ---
+                bool hasHPDamage = false;
+                bool hasLightBleed = false;
+                bool hasHeavyBleed = false;
+                bool hasFracture = false;
+                bool hasDestroyedLimb = false;
+
+                foreach (EBodyPart bodyPart in _bodyParts)
+                {
+                    if (bodyPart == EBodyPart.Common) continue;
+                    try
+                    {
+                        var health = activeHC.GetBodyPartHealth(bodyPart, false);
+                        if (health.Current <= 0f)
+                            hasDestroyedLimb = true;
+                        else if (health.Current < health.Maximum * 0.95f)
+                            hasHPDamage = true;
+                    }
+                    catch { /* skip inaccessible parts */ }
+                }
+
+                // Check for active bleeding and fracture effects
+                try
+                {
+                    var allEffects = activeHC.GetAllActiveEffects(EBodyPart.Common);
+                    if (allEffects != null)
+                    {
+                        foreach (var effect in allEffects)
+                        {
+                            if (effect == null) continue;
+                            string typeName = effect.Type?.Name;
+                            if (typeName == null) continue;
+
+                            if (typeName == "LightBleeding") hasLightBleed = true;
+                            else if (typeName == "HeavyBleeding") hasHeavyBleed = true;
+                            else if (typeName == "Fracture") hasFracture = true;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // GetAllActiveEffects may not accept Common — try per-part
+                    BotMindPlugin.Log?.LogDebug($"GetAllActiveEffects(Common) failed, trying per-part: {ex.Message}");
+                    foreach (EBodyPart bodyPart in _bodyParts)
+                    {
+                        if (bodyPart == EBodyPart.Common) continue;
+                        try
+                        {
+                            var effects = activeHC.GetAllActiveEffects(bodyPart);
+                            if (effects == null) continue;
+                            foreach (var effect in effects)
+                            {
+                                if (effect == null) continue;
+                                string typeName = effect.Type?.Name;
+                                if (typeName == null) continue;
+
+                                if (typeName == "LightBleeding") hasLightBleed = true;
+                                else if (typeName == "HeavyBleeding") hasHeavyBleed = true;
+                                else if (typeName == "Fracture") hasFracture = true;
+                            }
+                        }
+                        catch { /* skip */ }
+                    }
+                }
+
+                bool hasAnyInjury = hasHPDamage || hasLightBleed || hasHeavyBleed || hasFracture || hasDestroyedLimb;
+                if (!hasAnyInjury) return true; // no injuries at all
+
+                // --- Phase 2: Scan inventory for treatment capability ---
+                bool canHealHP = false;
+                bool canStopLightBleed = false;
+                bool canStopHeavyBleed = false;
+                bool canFixFracture = false;
+                bool canRestoreLimb = false;
+
                 var equipment = _player?.InventoryController?.Inventory?.Equipment;
-                if (equipment == null) return false;
+                if (equipment == null) return false; // can't check, allow summon
 
-                // Check the three main item containers
-                if (ContainerHasMeds(equipment.GetSlot(EquipmentSlot.Backpack)?.ContainedItem as CompoundItem))
-                    return true;
-                if (ContainerHasMeds(equipment.GetSlot(EquipmentSlot.TacticalVest)?.ContainedItem as CompoundItem))
-                    return true;
-                if (ContainerHasMeds(equipment.GetSlot(EquipmentSlot.Pockets)?.ContainedItem as CompoundItem))
-                    return true;
+                ScanContainerForTreatments(equipment.GetSlot(EquipmentSlot.Backpack)?.ContainedItem as CompoundItem,
+                    ref canHealHP, ref canStopLightBleed, ref canStopHeavyBleed, ref canFixFracture, ref canRestoreLimb);
+                ScanContainerForTreatments(equipment.GetSlot(EquipmentSlot.TacticalVest)?.ContainedItem as CompoundItem,
+                    ref canHealHP, ref canStopLightBleed, ref canStopHeavyBleed, ref canFixFracture, ref canRestoreLimb);
+                ScanContainerForTreatments(equipment.GetSlot(EquipmentSlot.Pockets)?.ContainedItem as CompoundItem,
+                    ref canHealHP, ref canStopLightBleed, ref canStopHeavyBleed, ref canFixFracture, ref canRestoreLimb);
+                // Also check the secure container (Gamma, Epsilon, etc.)
+                ScanContainerForTreatments(equipment.GetSlot(EquipmentSlot.SecuredContainer)?.ContainedItem as CompoundItem,
+                    ref canHealHP, ref canStopLightBleed, ref canStopHeavyBleed, ref canFixFracture, ref canRestoreLimb);
 
-                return false;
+                // --- Phase 3: Allow MedicBuddy if ANY injury lacks treatment ---
+                if (hasHPDamage && !canHealHP) return false;
+                if (hasLightBleed && !canStopLightBleed) return false;
+                if (hasHeavyBleed && !canStopHeavyBleed) return false;
+                if (hasFracture && !canFixFracture) return false;
+                if (hasDestroyedLimb && !canRestoreLimb) return false;
+
+                // All injuries have matching treatments — player can self-heal
+                if (BotMindConfig.VerboseLogging.Value)
+                {
+                    BotMindPlugin.Log?.LogInfo("[MedicBuddy] Player can self-heal: " +
+                        $"hp={hasHPDamage}→{canHealHP}, lightBleed={hasLightBleed}→{canStopLightBleed}, " +
+                        $"heavyBleed={hasHeavyBleed}→{canStopHeavyBleed}, fracture={hasFracture}→{canFixFracture}, " +
+                        $"destroyed={hasDestroyedLimb}→{canRestoreLimb}");
+                }
+                return true;
             }
             catch (Exception ex)
             {
-                BotMindPlugin.Log?.LogDebug($"Error checking player medical items: {ex.Message}");
-                return false; // Allow summon if we can't check
+                BotMindPlugin.Log?.LogDebug($"Error checking player medical capability: {ex.Message}");
+                return false; // Allow summon if we can't determine
             }
         }
 
-        /// <summary>
-        /// Checks if a container has any usable medical items.
-        /// Uses GetAllItems() to scan all nested items including inside pouches.
-        /// Note: EFT auto-destroys medkits when HP reaches 0, so any MedsItemClass
-        /// present in inventory is guaranteed to have remaining uses.
-        /// </summary>
-        private static bool ContainerHasMeds(CompoundItem container)
+        // Well-known Tarkov template IDs for medical item categorization.
+        // These IDs are stable across versions. Grouped by treatment capability.
+
+        /// <summary>Items that stop heavy bleeding (tourniquets, hemostatics, heavy medkits).</summary>
+        private static readonly HashSet<string> HEAVY_BLEED_ITEMS = new HashSet<string>
         {
-            if (container == null) return false;
+            "5e8488fa988a8b0f1d60e59f", // CALOK-B hemostatic
+            "5e831507ea0a7c419c2f9bd6", // Esmarch tourniquet
+            "60098b1705871a0e2c55a60c", // CAT tourniquet
+            "5af0548586f7743a532b7e58", // Hemostat
+        };
+
+        /// <summary>Items that stop light bleeding (bandages, all medkits that treat bleeds).</summary>
+        private static readonly HashSet<string> LIGHT_BLEED_ITEMS = new HashSet<string>
+        {
+            "544fb25a4bdc2dfb738b4567", // Army Bandage
+            "5751a25924597722c463c472", // Aseptic Bandage
+        };
+
+        /// <summary>Items that fix fractures (splints).</summary>
+        private static readonly HashSet<string> FRACTURE_ITEMS = new HashSet<string>
+        {
+            "544fb3364bdc2d34748b456a", // Aluminum Splint
+            "5af0454c86f7746bf20992e8", // Immobilizing Splint
+        };
+
+        /// <summary>Surgical kits that restore destroyed limbs.</summary>
+        private static readonly HashSet<string> SURGICAL_ITEMS = new HashSet<string>
+        {
+            "5d02778e86f774203e7dedbe", // CMS (Compact Medical Surgery Kit)
+            "5d02797c86f774203f38e30a", // Surv12 Field Surgical Kit
+        };
+
+        /// <summary>Medkits with HP resource that also treat various effects.</summary>
+        private static readonly HashSet<string> MEDKIT_ITEMS = new HashSet<string>
+        {
+            "590c678286f77426c9660122", // IFAK - HP + light bleed + heavy bleed + fracture
+            "590c661e86f7741b993b9d17", // Car First Aid Kit - HP + light bleed
+            "5d1b376e86f774252519444e", // AFAK - HP + light bleed + heavy bleed
+            "590c657e86f77412b013051d", // Grizzly - HP + all effects + surgery
+            "5755356824597772cb798962", // AI-2 - HP only (no effect treatment)
+        };
+
+        /// <summary>
+        /// Scans a container for items that can treat specific conditions.
+        /// Categorizes by: medkit (HP), bleed treatment, fracture treatment, surgical.
+        /// Skips food, drink, and stimulators entirely.
+        /// </summary>
+        private static void ScanContainerForTreatments(
+            CompoundItem container,
+            ref bool canHealHP,
+            ref bool canStopLightBleed,
+            ref bool canStopHeavyBleed,
+            ref bool canFixFracture,
+            ref bool canRestoreLimb)
+        {
+            if (container == null) return;
 
             try
             {
                 foreach (var item in container.GetAllItems())
                 {
-                    if (item is MedsItemClass)
-                        return true;
+                    // Skip food, drink, and stimulators — they don't treat injuries
+                    if (item is FoodDrinkItemClass) continue;
+                    if (item is StimulatorItemClass) continue;
+                    if (!(item is MedsItemClass)) continue;
+
+                    string templateId = item.TemplateId;
+                    if (string.IsNullOrEmpty(templateId)) continue;
+
+                    // Medkits heal HP and some also treat effects
+                    if (MEDKIT_ITEMS.Contains(templateId))
+                    {
+                        canHealHP = true;
+                        // IFAK treats light+heavy bleed and fracture
+                        if (templateId == "590c678286f77426c9660122") { canStopLightBleed = true; canStopHeavyBleed = true; canFixFracture = true; }
+                        // Car medkit treats light bleed only
+                        else if (templateId == "590c661e86f7741b993b9d17") { canStopLightBleed = true; }
+                        // AFAK treats light+heavy bleed
+                        else if (templateId == "5d1b376e86f774252519444e") { canStopLightBleed = true; canStopHeavyBleed = true; }
+                        // Grizzly treats everything including surgery
+                        else if (templateId == "590c657e86f77412b013051d") { canStopLightBleed = true; canStopHeavyBleed = true; canFixFracture = true; canRestoreLimb = true; }
+                        // AI-2 only heals HP, no effect treatment
+                        continue;
+                    }
+
+                    // Specific treatment items
+                    if (HEAVY_BLEED_ITEMS.Contains(templateId)) { canStopHeavyBleed = true; continue; }
+                    if (LIGHT_BLEED_ITEMS.Contains(templateId)) { canStopLightBleed = true; continue; }
+                    if (FRACTURE_ITEMS.Contains(templateId)) { canFixFracture = true; continue; }
+                    if (SURGICAL_ITEMS.Contains(templateId)) { canRestoreLimb = true; canFixFracture = true; continue; }
+
+                    // Unknown MedsItemClass (mod items, etc.) — don't count as treatment
+                    // This is conservative: if we don't recognize it, we don't block MedicBuddy
                 }
             }
             catch (Exception ex)
             {
-                BotMindPlugin.Log?.LogDebug($"Error scanning container for meds: {ex.Message}");
+                BotMindPlugin.Log?.LogDebug($"Error scanning container for treatments: {ex.Message}");
             }
-
-            return false;
         }
 
         private void ApplyHealing()
@@ -1713,7 +2508,10 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
             }
 
             _medicBot = null;
+            _medicBuddyGroup = null;
             _rallyPoint = null;
+            _nextFriendshipRefreshTime = 0f;
+            _invulnerableBots.Clear();
             SetState(MedicBuddyState.Idle);
         }
 
@@ -1786,6 +2584,9 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
             }
 
             _instance = null;
+
+            // Review 10 Fix: Restore player stance before cleanup to prevent prone lock on destroy
+            RestorePlayerStance();
 
             // Issue 1 Fix: Use centralized unsubscribe method
             UnsubscribeFromSpawner();

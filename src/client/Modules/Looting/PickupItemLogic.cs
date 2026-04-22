@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
 using UnityEngine.AI;
+using Blackhorse311.BotMind.Modules;
 
 namespace Blackhorse311.BotMind.Modules.Looting
 {
@@ -14,7 +15,7 @@ namespace Blackhorse311.BotMind.Modules.Looting
     /// Logic for a bot to pick up a loose item from the ground.
     /// Based on BotItemTaker patterns from EFT.
     /// </summary>
-    public class PickupItemLogic : CustomLogic
+    public class PickupItemLogic : CustomLogic, ICompletableLogic
     {
         private enum State
         {
@@ -35,6 +36,8 @@ namespace Blackhorse311.BotMind.Modules.Looting
         private bool _pickupInProgress;
         // Healthcare Critical: Track stopped state to prevent callbacks modifying state after Stop()
         private volatile bool _isStopped;
+        // Review 10 Fix: Prevent timeout log spam (same pattern as LootCorpseLogic/LootContainerLogic)
+        private bool _hasTimedOut;
 
         // Constants from BotItemTaker
         private const float DIST_TO_TAKE = 1.5f;
@@ -74,6 +77,7 @@ namespace Blackhorse311.BotMind.Modules.Looting
             try
             {
                 _currentState = State.MovingToItem;
+                _target = null; // Reset so RegisterLogic runs on next Update (BigBrain reuses instances)
                 _startTime = Time.time;
                 _unpauseTime = -1f;
                 _lookEndTime = -1f;
@@ -81,6 +85,7 @@ namespace Blackhorse311.BotMind.Modules.Looting
                 _pickupInProgress = false;
                 _isStopped = false; // Reset stopped flag on start
                 _pathFailureCount = 0;  // Reset failure count on start
+                _hasTimedOut = false;   // Reset timeout flag on start
                 BotMindPlugin.Log?.LogDebug($"[{BotOwner?.name ?? "Unknown"}] PickupItemLogic started");
             }
             catch (Exception ex)
@@ -102,8 +107,7 @@ namespace Blackhorse311.BotMind.Modules.Looting
                 // v1.4.0 Fix: Reset pose/speed to defaults
                 if (BotOwner != null)
                 {
-                    BotOwner.SetPose(1f);
-                    BotOwner.SetTargetMoveSpeed(1f);
+                    BotOwner.ResetToDefaultStance();
                 }
 
                 BotMindPlugin.Log?.LogDebug($"[{BotOwner?.name ?? "Unknown"}] PickupItemLogic stopped");
@@ -127,17 +131,22 @@ namespace Blackhorse311.BotMind.Modules.Looting
                     lootingData.Layer?.RegisterLogic(this);
                 }
 
+                // BigBrain can call Update with null data on the first frame — wait for ActionData
                 if (_target == null)
                 {
-                    _currentState = State.Complete;
                     return;
                 }
 
                 // Overall timeout: prevent being stuck on any single item forever
                 if (Time.time - _startTime > OVERALL_TIMEOUT)
                 {
-                    BotMindPlugin.Log?.LogWarning(
-                        $"[{BotOwner?.name ?? "Unknown"}] Item pickup timed out after {OVERALL_TIMEOUT}s in state {_currentState}. Aborting.");
+                    if (!_hasTimedOut)
+                    {
+                        _hasTimedOut = true;
+                        BotMindPlugin.Log?.LogWarning(
+                            $"[{BotOwner?.name ?? "Unknown"}] Item pickup timed out after {OVERALL_TIMEOUT}s in state {_currentState}. Aborting.");
+                    }
+                    _isStopped = true; // Review 10 Fix: Silence late callbacks after timeout
                     _currentState = State.Complete;
                     return;
                 }
@@ -265,6 +274,8 @@ namespace Blackhorse311.BotMind.Modules.Looting
             // Check if look period complete
             if (Time.time >= _lookEndTime)
             {
+                // v1.8.0: Voice line when picking up loose loot
+                BotOwner.BotTalk?.TrySay(EPhraseTrigger.OnLoot, true);
                 _currentState = State.PickingUp;
             }
         }
@@ -287,6 +298,7 @@ namespace Blackhorse311.BotMind.Modules.Looting
                     BotMindPlugin.Log?.LogWarning(
                         $"[{BotOwner?.name ?? "Unknown"}] Pickup operation timed out after {PICKUP_OPERATION_TIMEOUT}s - " +
                         "callback may have failed. Completing pickup to prevent stuck state.");
+                    _isStopped = true; // Silence late callbacks after timeout
                     _pickupInProgress = false;
                     _currentState = State.Complete;
                     return;
@@ -334,16 +346,8 @@ namespace Blackhorse311.BotMind.Modules.Looting
             }
 
             // Third Review Fix: Reuse cached containers list to avoid allocation
-            _containersCache.Clear();
             var equipment = inventoryController.Inventory?.Equipment;
-
-            var backpack = equipment?.GetSlot(EquipmentSlot.Backpack)?.ContainedItem as CompoundItem;
-            var vest = equipment?.GetSlot(EquipmentSlot.TacticalVest)?.ContainedItem as CompoundItem;
-            var pockets = equipment?.GetSlot(EquipmentSlot.Pockets)?.ContainedItem as CompoundItem;
-
-            if (backpack != null) _containersCache.Add(backpack);
-            if (vest != null) _containersCache.Add(vest);
-            if (pockets != null) _containersCache.Add(pockets);
+            BotInventoryHelper.GetEquipmentContainers(equipment, _containersCache);
 
             // Try to find appropriate place and move item
             var moveResult = InteractionsHandlerClass.QuickFindAppropriatePlace(
@@ -397,6 +401,8 @@ namespace Blackhorse311.BotMind.Modules.Looting
         }
 
         public bool IsComplete => _currentState == State.Complete;
+
+        public bool HasFailed => false;
 
         public override void BuildDebugText(StringBuilder stringBuilder)
         {

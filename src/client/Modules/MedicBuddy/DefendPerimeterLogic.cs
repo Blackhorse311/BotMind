@@ -38,6 +38,9 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
 
         // Reusable list for scan results — avoids allocation each scan cycle
         private readonly List<(Player player, float distance)> _threatCandidates = new List<(Player, float)>();
+        // Static comparer to avoid delegate allocation on sort
+        private static readonly Comparison<(Player player, float distance)> _threatComparer =
+            (a, b) => a.distance.CompareTo(b.distance);
 
         public DefendPerimeterLogic(BotOwner botOwner) : base(botOwner)
         {
@@ -61,8 +64,13 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
                 if (controller != null)
                 {
                     _assignedPosition = controller.GetDefensePosition(BotOwner);
+
+                    // v1.8.0: Try to snap to actual cover near assigned position
+                    _assignedPosition = TryFindCoverPosition(_assignedPosition);
                 }
 
+                // v1.8.0: Voice line when taking defensive position
+                BotOwner.BotTalk?.TrySay(EPhraseTrigger.Covering, true);
                 BotMindPlugin.Log?.LogDebug($"[{BotOwner?.name ?? "Unknown"}] DefendPerimeterLogic started at position {_assignedPosition}");
             }
             catch (Exception ex)
@@ -112,6 +120,9 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
                 {
                     _nextMoveTime = Time.time + MOVE_UPDATE_INTERVAL;
                     _assignedPosition = controller.GetDefensePosition(BotOwner);
+
+                    // v1.8.0: Try to snap to actual cover near assigned position
+                    _assignedPosition = TryFindCoverPosition(_assignedPosition);
                 }
 
                 float distanceToPosition = Vector3.Distance(BotOwner.Position, _assignedPosition);
@@ -138,13 +149,11 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
                     // Move to assigned position
                     BotOwner.SetPose(1f);
                     BotOwner.SetTargetMoveSpeed(distanceToPosition > 10f ? 0.8f : 0.5f);
-                    BotOwner.Steering.LookToMovingDirection();
 
                     // Issue 16 Fix: Only attempt movement if NavMesh position is valid
-                    // Skip movement this frame if no valid NavMesh position found
                     if (NavMesh.SamplePosition(_assignedPosition, out NavMeshHit hit, 5f, NavMesh.AllAreas))
                     {
-                        BotOwner.GoToPoint(hit.position, true, -1f, false, false, true, false, false);
+                        BotOwner.GoToPoint(hit.position, true, -1f, false, true, true, false, false);
                     }
                     // else: skip this frame, position will be recalculated next interval
                 }
@@ -184,18 +193,22 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
                 if (candidate == patient) continue;
                 if (candidate.IsAI && candidate.AIData?.BotOwner != null && controller.IsBotInTeam(candidate.AIData.BotOwner)) continue;
 
-                // Skip if this player is an ally of our bot's group
-                if (BotOwner.BotsGroup != null && !BotOwner.BotsGroup.IsEnemy(candidate))
-                {
-                    // Not an enemy — could be an ally or neutral. Don't target.
-                    // CheckAndAddEnemy will validate if they should be hostile.
-                    // Only proceed if CheckAndAddEnemy says yes.
-                    if (!BotOwner.BotsGroup.CheckAndAddEnemy(candidate))
-                        continue;
-                }
-
+                // Review 10 Fix: Distance check BEFORE enemy registration to avoid
+                // registering every player on the map as an enemy every scan cycle
                 float distance = Vector3.Distance(botPos, candidate.Position);
                 if (distance > THREAT_DETECTION_RADIUS) continue;
+
+                // Skip allies — only register and track actual enemies
+                // CheckAndAddEnemy registers the player as a threat if EFT's faction logic
+                // considers them hostile. Returns false for allies (idempotent, safe to call repeatedly).
+                if (BotOwner.BotsGroup != null)
+                {
+                    if (!BotOwner.BotsGroup.IsEnemy(candidate) &&
+                        !BotOwner.BotsGroup.CheckAndAddEnemy(candidate))
+                    {
+                        continue;
+                    }
+                }
 
                 _threatCandidates.Add((candidate, distance));
             }
@@ -203,20 +216,31 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
             if (_threatCandidates.Count == 0) return;
 
             // Sort by distance (closest first)
-            _threatCandidates.Sort((a, b) => a.distance.CompareTo(b.distance));
-
-            // Register up to MAX_TRACKED_THREATS with the bot's awareness system
-            int count = Mathf.Min(_threatCandidates.Count, MAX_TRACKED_THREATS);
-            for (int i = 0; i < count; i++)
-            {
-                var threat = _threatCandidates[i];
-
-                // CheckAndAddEnemy validates friendliness and shares with all group members
-                BotOwner.BotsGroup?.CheckAndAddEnemy(threat.player);
-            }
+            _threatCandidates.Sort(_threatComparer);
 
             // Track nearest for look direction
             _nearestThreat = _threatCandidates[0].player;
+        }
+
+        /// <summary>
+        /// v1.8.0: Try to find a real cover position (wall, object) near the assigned position
+        /// using EFT's native cover graph. Falls back to the original position if no cover found.
+        /// </summary>
+        private Vector3 TryFindCoverPosition(Vector3 assignedPos)
+        {
+            try
+            {
+                var coverPoint = BotOwner.Covers?.FindHidePoint(assignedPos, 0f);
+                if (coverPoint != null)
+                {
+                    return coverPoint.Position;
+                }
+            }
+            catch
+            {
+                // Cover system may not be initialized — fall back silently
+            }
+            return assignedPos;
         }
 
         private void UpdateLookDirection(Player player)
@@ -224,10 +248,10 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
             // If we have a nearby threat, face toward it
             if (_nearestThreat != null && _nearestThreat.HealthController != null && _nearestThreat.HealthController.IsAlive)
             {
-                Vector3 dirToThreat = (_nearestThreat.Position - BotOwner.Position).normalized;
+                Vector3 dirToThreat = _nearestThreat.Position - BotOwner.Position;
                 if (dirToThreat.sqrMagnitude >= MIN_DIRECTION_SQR_MAGNITUDE)
                 {
-                    BotOwner.Steering.LookToDirection(dirToThreat);
+                    BotOwner.Steering.LookToDirection(dirToThreat.normalized);
                     return;
                 }
             }

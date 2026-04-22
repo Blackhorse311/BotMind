@@ -174,19 +174,21 @@ namespace Blackhorse311.BotMind.Modules.Questing
                 }
             }
 
-            // Fallback: if no reachable waypoints found, explore locally instead of standing idle
+            // Always add a local patrol as lowest-priority fallback.
+            // This ensures bots have something to do even when all waypoints fail at runtime.
+            _objectives.Add(new QuestObjective
+            {
+                Type = QuestObjectiveType.Explore,
+                Name = "Local Patrol",
+                TargetPosition = _bot.Position,
+                CompletionRadius = 40f,
+                Priority = 5f // Low priority so waypoints are tried first
+            });
+
             if (successCount == 0)
             {
                 BotMindPlugin.Log?.LogWarning(
-                    $"[{_bot?.name}] No reachable waypoints generated — falling back to local exploration");
-                _objectives.Add(new QuestObjective
-                {
-                    Type = QuestObjectiveType.Explore,
-                    Name = "Local Patrol",
-                    TargetPosition = _bot.Position,
-                    CompletionRadius = 40f,
-                    Priority = 45f
-                });
+                    $"[{_bot?.name}] No reachable waypoints generated — local patrol is only objective");
             }
 
             // Extract objective — SAIN handles actual extraction point assignment.
@@ -207,13 +209,13 @@ namespace Blackhorse311.BotMind.Modules.Questing
         /// v1.7.0 Fix: When consecutive nav failures exceed threshold, skip the far tier to avoid
         /// regenerating unreachable waypoints at the same distance (Bot40 loop on Woods).
         /// </summary>
+        // Review 10 Fix: Static arrays to avoid per-call allocation
+        private static readonly float[][] PMC_DISTANCE_TIERS = { new[] { 50f, 150f }, new[] { 20f, 60f }, new[] { 10f, 30f } };
+        private static readonly float[][] SCAV_DISTANCE_TIERS = { new[] { 30f, 100f }, new[] { 15f, 40f }, new[] { 8f, 20f } };
+
         private Vector3 GetRandomNavMeshPointGraduated(Vector3 origin, bool isPMC)
         {
-            // Try each distance tier: far → medium → close
-            // PMCs range further, scavs stay closer
-            float[][] tiers = isPMC
-                ? new[] { new[] { 50f, 150f }, new[] { 20f, 60f }, new[] { 10f, 30f } }
-                : new[] { new[] { 30f, 100f }, new[] { 15f, 40f }, new[] { 8f, 20f } };
+            float[][] tiers = isPMC ? PMC_DISTANCE_TIERS : SCAV_DISTANCE_TIERS;
 
             // v1.7.0 Fix: Skip far tier(s) when recent nav failures indicate the bot is in
             // an area where long-range waypoints are unreachable (e.g., isolated NavMesh zones).
@@ -282,19 +284,20 @@ namespace Blackhorse311.BotMind.Modules.Questing
                 }
             }
 
-            // Fallback: if no reachable patrol points found, explore locally
+            // Always add local patrol as fallback (same pattern as PMC objectives)
+            _objectives.Add(new QuestObjective
+            {
+                Type = QuestObjectiveType.Explore,
+                Name = "Local Patrol",
+                TargetPosition = _bot.Position,
+                CompletionRadius = 30f,
+                Priority = 5f
+            });
+
             if (successCount == 0)
             {
                 BotMindPlugin.Log?.LogWarning(
-                    $"[{_bot?.name}] No reachable patrol points generated — falling back to local exploration");
-                _objectives.Add(new QuestObjective
-                {
-                    Type = QuestObjectiveType.Explore,
-                    Name = "Local Patrol",
-                    TargetPosition = _bot.Position,
-                    CompletionRadius = 30f,
-                    Priority = 40f
-                });
+                    $"[{_bot?.name}] No reachable patrol points generated — local patrol is only objective");
             }
         }
 

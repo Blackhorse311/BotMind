@@ -38,6 +38,8 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
                 _retreatTarget = Vector3.zero;
 
                 CalculateRetreatTarget();
+                // v1.8.0: Voice line when retreating
+                BotOwner.BotTalk?.TrySay(EPhraseTrigger.GetBack, true);
                 BotMindPlugin.Log?.LogDebug($"[{BotOwner?.name ?? "Unknown"}] FollowTeamLogic started - retreating to {_retreatTarget}");
             }
             catch (Exception ex)
@@ -80,32 +82,25 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
             else
             {
                 // Calculate direction away from player
-                Vector3 awayDir = (BotOwner.Position - player.Position).normalized;
-
-                // Seventh Review Fix (Issue 8): Use named constant and protect against zero random
+                Vector3 awayDir = (BotOwner.Position - player.Position);
+                awayDir.y = 0f;
                 if (awayDir.sqrMagnitude < MIN_DIRECTION_SQR_MAGNITUDE)
-                {
-                    Vector3 randomDir = Random.insideUnitSphere;
-                    if (randomDir.sqrMagnitude < MIN_DIRECTION_SQR_MAGNITUDE)
-                    {
-                        randomDir = Vector3.forward; // Fallback if random is zero
-                    }
-                    awayDir = randomDir.normalized;
-                    awayDir.y = 0;
-                    if (awayDir.sqrMagnitude < MIN_DIRECTION_SQR_MAGNITUDE)
-                    {
-                        awayDir = Vector3.forward; // Ensure we have a valid direction
-                    }
+                    awayDir = Vector3.forward;
+                else
                     awayDir = awayDir.normalized;
-                }
 
                 _retreatTarget = BotOwner.Position + awayDir * RETREAT_DISTANCE;
             }
 
-            // Validate with NavMesh
-            if (NavMesh.SamplePosition(_retreatTarget, out NavMeshHit hit, 20f, NavMesh.AllAreas))
+            // Validate with NavMesh — fall back to current position if no valid point nearby
+            // Review 10 Fix: Reduced from 20f to 5f — large radius snaps to wrong floors/buildings
+            if (NavMesh.SamplePosition(_retreatTarget, out NavMeshHit hit, 5f, NavMesh.AllAreas))
             {
                 _retreatTarget = hit.position;
+            }
+            else
+            {
+                _retreatTarget = BotOwner.Position;
             }
         }
 
@@ -132,7 +127,6 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
                 // Movement settings - move quickly
                 BotOwner.SetPose(1f);
                 BotOwner.SetTargetMoveSpeed(1f);
-                BotOwner.Steering.LookToMovingDirection();
 
                 // Update path periodically
                 if (Time.time >= _nextMoveTime)
@@ -146,7 +140,7 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
                         CalculateRetreatTarget();
                     }
 
-                    BotOwner.GoToPoint(_retreatTarget, true, -1f, false, false, true, false, false);
+                    BotOwner.GoToPoint(_retreatTarget, true, -1f, false, true, true, false, false);
                 }
             }
             catch (Exception ex)

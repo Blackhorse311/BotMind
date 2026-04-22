@@ -38,6 +38,13 @@ namespace Blackhorse311.BotMind.Configuration
         /// </summary>
         public static ConfigEntry<float> CombatAlertDuration { get; private set; }
 
+        /// <summary>
+        /// When enabled, BotMind logs detailed diagnostic information for all modules.
+        /// Useful for troubleshooting MedicBuddy spawning, looting, and questing issues.
+        /// Turn this on when reporting bugs — it produces a lot of output.
+        /// </summary>
+        public static ConfigEntry<bool> VerboseLogging { get; private set; }
+
         #endregion
 
         #region Looting Settings
@@ -193,6 +200,14 @@ namespace Blackhorse311.BotMind.Configuration
                 "Enable MedicBuddy",
                 true,
                 "Enable the MedicBuddy summon feature");
+
+            VerboseLogging = config.Bind(
+                "1. General",
+                "Verbose Logging",
+                false,
+                "Log detailed diagnostic info for all BotMind modules. " +
+                "Turn on when troubleshooting — produces heavy log output. " +
+                "Changes take effect immediately (no restart needed).");
 
             // v1.4.0: Combat alert duration — how long bots stay in fight mode after detecting an enemy
             // v1.5.0 Fix: Reduced default from 30s to 15s — 30s kept bots in perpetual "combat"

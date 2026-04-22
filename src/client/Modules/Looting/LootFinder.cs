@@ -5,6 +5,7 @@ using EFT.InventoryLogic;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Reflection;
 using UnityEngine;
 using UnityEngine.AI;
 using Blackhorse311.BotMind.Configuration;
@@ -33,14 +34,22 @@ namespace Blackhorse311.BotMind.Modules.Looting
         private float _lastCleanupTime;
         /// <summary>Interval between stale target cleanup operations (seconds) - reduces CPU overhead.</summary>
         private const float CLEANUP_INTERVAL = 5f;
+        /// <summary>Max path validations per scan to limit NavMesh.CalculatePath cost.</summary>
+        private const int MAX_PATH_CHECKS_PER_SCAN = 10;
 
         // Issue 9 Fix: Pre-allocated buffer for Physics.OverlapSphereNonAlloc to reduce GC pressure
         // Third Review Fix: Changed from static to instance-based to prevent race condition
         // when multiple bots scan simultaneously (was causing data corruption)
         private readonly Collider[] _colliderBuffer = new Collider[512];
+        // Review 10 Fix: Layer mask for container scanning — avoids testing every collider in range
+        private static readonly int _interactiveLayerMask = 1 << 22; // EFT Interactive layer
 
         // Issue 12 Fix: Cached NavMeshPath to avoid allocations in hot path
         private readonly NavMeshPath _cachedNavPath = new NavMeshPath();
+
+        // Review 11 Fix: Cache reflection PropertyInfo for corpse Player property (shared with LootCorpseLogic pattern)
+        private static readonly ConcurrentDictionary<Type, PropertyInfo> _playerPropertyCache =
+            new ConcurrentDictionary<Type, PropertyInfo>();
 
         // Seventh Review Fix (Issue 160): Static comparison delegate to avoid lambda allocation in Sort
         private static readonly System.Comparison<LootTarget> _priorityComparer =
@@ -88,6 +97,12 @@ namespace Blackhorse311.BotMind.Modules.Looting
             // Sort by priority (value/distance ratio)
             // Seventh Review Fix (Issue 160): Use static delegate to avoid lambda allocation
             _targets.Sort(_priorityComparer);
+
+            // Review 10 Fix: Trim to reasonable size — bots only need one target at a time
+            if (_targets.Count > MAX_PATH_CHECKS_PER_SCAN)
+            {
+                _targets.RemoveRange(MAX_PATH_CHECKS_PER_SCAN, _targets.Count - MAX_PATH_CHECKS_PER_SCAN);
+            }
         }
 
         private void ScanForCorpses(Vector3 position, float radius)
@@ -106,12 +121,12 @@ namespace Blackhorse311.BotMind.Modules.Looting
                 return;
             }
 
-            // Healthcare Critical: Iterate directly - the DeadBodiesController's BodiesByGroup
-            // returns a stable collection that doesn't change during iteration.
-            // The previous ToArray() was creating 14+ MB of garbage per raid unnecessarily.
-            // If iteration fails due to collection modification, the catch block handles it.
+            // Iterate directly to avoid ToArray() GC pressure.
+            // Wrapped in try-catch to handle collection modification if a bot dies mid-scan.
             float radiusSqr = radius * radius;
 
+            try
+            {
             foreach (var body in bodies)
             {
                 if (body == null || IsBlacklisted(body))
@@ -154,9 +169,14 @@ namespace Blackhorse311.BotMind.Modules.Looting
                     Distance = distance,
                     EstimatedValue = estimatedValue,
                     Priority = LootTarget.CalculatePriority(estimatedValue, distance),
-                    IsCorpse = true,
+                    Type = LootTargetType.Corpse,
                     Target = body
                 });
+            }
+            }
+            catch (InvalidOperationException)
+            {
+                // Collection was modified during iteration (bot died mid-scan) — skip remaining bodies
             }
         }
 
@@ -165,7 +185,8 @@ namespace Blackhorse311.BotMind.Modules.Looting
 
         private void ScanForContainers(Vector3 position, float radius)
         {
-            int colliderCount = Physics.OverlapSphereNonAlloc(position, radius, _colliderBuffer);
+            // Review 10 Fix: Use layer mask to filter — avoids testing terrain/bullet/player colliders
+            int colliderCount = Physics.OverlapSphereNonAlloc(position, radius, _colliderBuffer, _interactiveLayerMask);
 
             if (colliderCount >= _colliderBuffer.Length)
             {
@@ -208,7 +229,7 @@ namespace Blackhorse311.BotMind.Modules.Looting
                     Distance = distance,
                     EstimatedValue = estimatedValue,
                     Priority = LootTarget.CalculatePriority(estimatedValue, distance),
-                    IsContainer = true,
+                    Type = LootTargetType.Container,
                     Target = container
                 });
             }
@@ -272,7 +293,7 @@ namespace Blackhorse311.BotMind.Modules.Looting
                     Distance = distance,
                     EstimatedValue = itemValue,
                     Priority = LootTarget.CalculatePriority(itemValue, distance),
-                    IsLooseItem = true,
+                    Type = LootTargetType.LooseItem,
                     Target = lootItem
                 });
             }
@@ -324,9 +345,9 @@ namespace Blackhorse311.BotMind.Modules.Looting
 
             try
             {
-                // Get the Player from the body via reflection
+                // Review 11 Fix: Use cached PropertyInfo instead of uncached GetProperty per call
                 var bodyType = body.GetType();
-                var playerProp = bodyType.GetProperty("Player");
+                var playerProp = _playerPropertyCache.GetOrAdd(bodyType, type => type.GetProperty("Player"));
                 if (playerProp == null) return totalValue;
 
                 var player = playerProp.GetValue(body) as Player;
@@ -356,9 +377,9 @@ namespace Blackhorse311.BotMind.Modules.Looting
                     }
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // Reflection failed - return base value
+                BotMindPlugin.Log?.LogDebug($"[{_bot?.name}] EstimateCorpseValue reflection/access failed: {ex.Message}");
             }
 
             return totalValue;
@@ -371,8 +392,9 @@ namespace Blackhorse311.BotMind.Modules.Looting
                 var item = equipment.GetSlot(slot)?.ContainedItem;
                 return item?.Template?.CreditsPrice ?? 0;
             }
-            catch
+            catch (Exception ex)
             {
+                BotMindPlugin.Log?.LogDebug($"[{_bot?.name}] GetSlotValue access failed: {ex.Message}");
                 return 0;
             }
         }
@@ -392,9 +414,9 @@ namespace Blackhorse311.BotMind.Modules.Looting
                     value += items[i]?.Template?.CreditsPrice ?? 0;
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // Failed to enumerate - return what we have
+                BotMindPlugin.Log?.LogDebug($"[{_bot?.name}] EstimateContainerContents enumeration failed: {ex.Message}");
             }
             return value;
         }
@@ -520,7 +542,7 @@ namespace Blackhorse311.BotMind.Modules.Looting
             try
             {
                 var bodyType = target.GetType();
-                var playerProp = bodyType.GetProperty("Player");
+                var playerProp = _playerPropertyCache.GetOrAdd(bodyType, type => type.GetProperty("Player"));
                 if (playerProp != null)
                 {
                     var player = playerProp.GetValue(target) as Player;
@@ -530,9 +552,9 @@ namespace Blackhorse311.BotMind.Modules.Looting
                     }
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // Reflection failed - fall through to fallback
+                BotMindPlugin.Log?.LogDebug($"GetStableTargetId reflection failed: {ex.Message}");
             }
 
             // Fallback: Use type name + GetHashCode (less stable but better than nothing)
@@ -574,6 +596,14 @@ namespace Blackhorse311.BotMind.Modules.Looting
         }
     }
 
+    /// <summary>Review 11 Fix: Enum replaces 3 mutually exclusive booleans that allowed invalid states.</summary>
+    public enum LootTargetType
+    {
+        Corpse,
+        Container,
+        LooseItem
+    }
+
     /// <summary>
     /// Represents a lootable target (corpse, container, or loose item).
     /// </summary>
@@ -583,9 +613,10 @@ namespace Blackhorse311.BotMind.Modules.Looting
         public float EstimatedValue { get; set; }
         public float Distance { get; set; }
         public float Priority { get; set; }
-        public bool IsCorpse { get; set; }
-        public bool IsContainer { get; set; }
-        public bool IsLooseItem { get; set; }
+        public LootTargetType Type { get; set; }
+        public bool IsCorpse => Type == LootTargetType.Corpse;
+        public bool IsContainer => Type == LootTargetType.Container;
+        public bool IsLooseItem => Type == LootTargetType.LooseItem;
         public object Target { get; set; }
 
         public static float CalculatePriority(float value, float distance)

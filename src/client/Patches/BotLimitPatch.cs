@@ -10,10 +10,11 @@ namespace Blackhorse311.BotMind.Patches
     /// Harmony PREFIX patch on BotsController.SetSettings to override the max bot count.
     ///
     /// When the MaxBotsPerMap slider is > 0, this patch replaces the incoming maxCount
-    /// parameter with EffectiveMaxBots (slider value minus reserved MedicBuddy slots).
-    /// When slider is 0 (default), the patch is a no-op and the game default is used.
+    /// parameter with the slider value. No pre-reservation is done at this stage.
+    /// MedicBuddy slot expansion happens just-in-time via BotLimitManager.
     ///
-    /// Compatible with Donuts' POSTFIX on the same method (Donuts doesn't modify maxCount).
+    /// When slider is 0 (default), the patch is a no-op and the game default is used.
+    /// Compatible with ABPS, Donuts, and other bot limit mods (they may override after us).
     /// </summary>
     internal class BotLimitPatch : ModulePatch
     {
@@ -35,7 +36,7 @@ namespace Blackhorse311.BotMind.Patches
 
                 BotMindPlugin.Log?.LogInfo(
                     $"[BotLimitPatch] Bot limit override: game={originalMax} -> effective={effectiveMax} " +
-                    $"(slider={BotLimitManager.SliderValue}, reserved={BotLimitManager.ReservedSlots})");
+                    $"(slider={BotLimitManager.SliderValue})");
             }
             catch (Exception ex)
             {

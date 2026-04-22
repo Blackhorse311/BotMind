@@ -6,19 +6,50 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <OutputType>Library</OutputType>
-    <Version>1.6.0</Version>
+    <Version>1.8.0</Version>
     <Authors>Blackhorse311</Authors>
     <Description>Server-side component for BotMind mod - handles configuration and data endpoints</Description>
     <!-- Suppress CS9107: Primary constructor parameter captured warning (intentional pattern) -->
     <NoWarn>CS9107</NoWarn>
+
+    <!-- SPT server installation path -->
+    <SptPath Condition="'$(SPT_PATH)' != ''">$(SPT_PATH)</SptPath>
+    <SptServerPath>$(SptPath)\SPT</SptServerPath>
+    <UserModsPath>$(SptPath)\SPT\user\mods</UserModsPath>
+    <ModFolderName>Blackhorse311-BotMind</ModFolderName>
   </PropertyGroup>
 
-  <ItemGroup>
-    <!-- SPT Server NuGet packages (4.0.12) -->
-    <PackageReference Include="SPTarkov.Common" Version="4.0.12" />
-    <PackageReference Include="SPTarkov.DI" Version="4.0.12" />
-    <PackageReference Include="SPTarkov.Server.Core" Version="4.0.12" />
-    <PackageReference Include="SPTarkov.Reflection" Version="4.0.12" />
+  <ItemGroup Condition="'$(SptPath)' != ''">
+    <!-- Reference SPT DLLs directly from installation for full API access.
+         NuGet packages are missing routing types (StaticRouter, RouteAction). -->
+    <Reference Include="SPTarkov.Common">
+      <HintPath>$(SptServerPath)\SPTarkov.Common.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="SPTarkov.DI">
+      <HintPath>$(SptServerPath)\SPTarkov.DI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="SPTarkov.Reflection">
+      <HintPath>$(SptServerPath)\SPTarkov.Reflection.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="SPTarkov.Server.Core">
+      <HintPath>$(SptServerPath)\SPTarkov.Server.Core.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="SPTarkov.Server.Web">
+      <HintPath>$(SptServerPath)\SPTarkov.Server.Web.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="SemanticVersioning">
+      <HintPath>$(SptServerPath)\SemanticVersioning.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Microsoft.Extensions.Logging.Abstractions">
+      <HintPath>$(SptServerPath)\Microsoft.Extensions.Logging.Abstractions.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
   </ItemGroup>
 
   <!-- Copy output to SPT user/mods folder (only when SPT_PATH is set) -->

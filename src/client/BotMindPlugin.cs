@@ -17,7 +17,7 @@ using Blackhorse311.BotMind.Patches;
 
 namespace Blackhorse311.BotMind
 {
-    [BepInPlugin("com.blackhorse311.botmind", "Blackhorse311-BotMind", "1.6.0")]
+    [BepInPlugin("com.blackhorse311.botmind", "Blackhorse311-BotMind", "1.8.0")]
     [BepInDependency("com.SPT.core", "4.0.0")]
     [BepInDependency("xyz.drakia.bigbrain", "1.4.0")]
     [BepInDependency("me.sol.sain", BepInDependency.DependencyFlags.SoftDependency)]
@@ -71,6 +71,8 @@ namespace Blackhorse311.BotMind
         {
             "Assault", "CursAssault", "Marksman"
         };
+
+
 
         public void Awake()
         {
@@ -157,21 +159,21 @@ namespace Blackhorse311.BotMind
             {
                 // Healthcare Critical: Clear singleton reference to support hot-reload
                 // Without this, subsequent plugin loads check _instance != null and skip initialization
+                // Disable Harmony patches BEFORE nulling log so teardown errors are visible
+                _gameStartedPatch?.Disable();
+                _gameWorldDisposePatch?.Disable();
+                _botLimitPatch?.Disable();
+
                 lock (_instanceLock)
                 {
                     if (_instance == this)
                     {
                         _instance = null;
-                        _log = null;
                         _initializationComplete = false;
                         _initializationFailed = false;
+                        _log = null; // Null log LAST so all cleanup can log
                     }
                 }
-
-                // Disable Harmony patches to prevent memory leaks
-                _gameStartedPatch?.Disable();
-                _gameWorldDisposePatch?.Disable();
-                _botLimitPatch?.Disable();
 
                 if (_medicBuddyController != null)
                 {

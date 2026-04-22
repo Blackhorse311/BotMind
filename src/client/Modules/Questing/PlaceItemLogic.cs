@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
 using UnityEngine.AI;
+using Blackhorse311.BotMind.Modules;
 
 namespace Blackhorse311.BotMind.Modules.Questing
 {
@@ -13,7 +14,7 @@ namespace Blackhorse311.BotMind.Modules.Questing
     /// Logic for placing an item at a quest location.
     /// Navigates to the placement location and performs the placement action.
     /// </summary>
-    public class PlaceItemLogic : CustomLogic
+    public class PlaceItemLogic : CustomLogic, ICompletableLogic
     {
         private enum State
         {
@@ -54,6 +55,7 @@ namespace Blackhorse311.BotMind.Modules.Questing
             try
             {
                 _currentState = State.MovingToLocation;
+                _objective = null; // Reset so RegisterLogic runs on next Update
                 _startTime = Time.time;
                 _nextMoveTime = 0f;
                 BotMindPlugin.Log?.LogDebug($"[{BotOwner?.name ?? "Unknown"}] PlaceItemLogic started");
@@ -73,8 +75,7 @@ namespace Blackhorse311.BotMind.Modules.Questing
                 // v1.4.0 Fix: Reset pose/speed to defaults
                 if (BotOwner != null)
                 {
-                    BotOwner.SetPose(1f);
-                    BotOwner.SetTargetMoveSpeed(1f);
+                    BotOwner.ResetToDefaultStance();
                 }
                 BotMindPlugin.Log?.LogDebug($"[{BotOwner?.name ?? "Unknown"}] PlaceItemLogic stopped");
             }
@@ -98,7 +99,13 @@ namespace Blackhorse311.BotMind.Modules.Questing
                     questingData.Layer?.RegisterLogic(this);
                 }
 
-                if (_objective == null || _placePosition == Vector3.zero)
+                // BigBrain can call Update with null data on the first frame — wait for ActionData
+                if (_objective == null)
+                {
+                    return;
+                }
+
+                if (_placePosition == Vector3.zero)
                 {
                     _currentState = State.Failed;
                     return;
@@ -159,13 +166,13 @@ namespace Blackhorse311.BotMind.Modules.Questing
                 Vector3 direction = (_placePosition - BotOwner.Position).normalized;
                 Vector3 destination = _placePosition - direction * 0.5f;
 
-                var pathResult = BotOwner.GoToPoint(destination, true, -1f, false, false, true, false, false);
+                var pathResult = BotOwner.GoToPoint(destination, true, -1f, false, true, true, false, false);
                 if (pathResult != NavMeshPathStatus.PathComplete)
                 {
                     // Try to find nearest valid position
                     if (NavMesh.SamplePosition(_placePosition, out NavMeshHit hit, 5f, NavMesh.AllAreas))
                     {
-                        BotOwner.GoToPoint(hit.position, true, -1f, false, false, true, false, false);
+                        BotOwner.GoToPoint(hit.position, true, -1f, false, true, true, false, false);
                     }
                     else
                     {
@@ -177,10 +184,10 @@ namespace Blackhorse311.BotMind.Modules.Questing
 
         private void LookAtPlacePosition()
         {
-            Vector3 direction = (_placePosition - BotOwner.Position).normalized;
-            if (direction.sqrMagnitude > 0.01f)
+            Vector3 diff = _placePosition - BotOwner.Position;
+            if (diff.sqrMagnitude > 0.01f)
             {
-                BotOwner.Steering.LookToDirection(direction);
+                BotOwner.Steering.LookToDirection(diff.normalized);
             }
         }
 
@@ -221,10 +228,7 @@ namespace Blackhorse311.BotMind.Modules.Questing
             }
 
             // Issue 15 Fix: Use cached lists to avoid allocations every frame
-            _containerCache.Clear();
-            AddContainerIfNotNull(_containerCache, equipment.GetSlot(EquipmentSlot.Backpack)?.ContainedItem as CompoundItem);
-            AddContainerIfNotNull(_containerCache, equipment.GetSlot(EquipmentSlot.TacticalVest)?.ContainedItem as CompoundItem);
-            AddContainerIfNotNull(_containerCache, equipment.GetSlot(EquipmentSlot.Pockets)?.ContainedItem as CompoundItem);
+            BotInventoryHelper.GetEquipmentContainers(equipment, _containerCache);
 
             _itemCache.Clear();
             foreach (var container in _containerCache)
@@ -245,15 +249,9 @@ namespace Blackhorse311.BotMind.Modules.Questing
             return false;
         }
 
-        private void AddContainerIfNotNull(List<CompoundItem> list, CompoundItem container)
-        {
-            if (container != null)
-            {
-                list.Add(container);
-            }
-        }
-
         public bool IsComplete => _currentState == State.Complete || _currentState == State.Failed;
+
+        public bool HasFailed => false;
 
         public override void BuildDebugText(StringBuilder stringBuilder)
         {

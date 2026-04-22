@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
 using UnityEngine.AI;
+using Blackhorse311.BotMind.Modules;
 
 namespace Blackhorse311.BotMind.Modules.Looting
 {
@@ -14,7 +15,7 @@ namespace Blackhorse311.BotMind.Modules.Looting
     /// Logic for a bot to loot a container (crate, bag, etc.).
     /// Based on BotLootOpener patterns from EFT.
     /// </summary>
-    public class LootContainerLogic : CustomLogic
+    public class LootContainerLogic : CustomLogic, ICompletableLogic
     {
         private enum State
         {
@@ -49,6 +50,7 @@ namespace Blackhorse311.BotMind.Modules.Looting
         private float _lastMoveDistance = float.MaxValue;
         private int _noProgressCount;
         private const int MAX_NO_PROGRESS = 5;
+        private bool _hasFailed;
         /// <summary>
         /// Bug Fix: Emergency timeout for callback-only completion.
         /// If the inventory transaction callback never fires (due to EFT bug), this prevents
@@ -102,6 +104,7 @@ namespace Blackhorse311.BotMind.Modules.Looting
                 _hasTimedOut = false; // Reset timeout guard on start
                 _lastMoveDistance = float.MaxValue;
                 _noProgressCount = 0;
+                _hasFailed = false;
                 // Reset _target so the registration block in Update() always fires for a
                 // fresh action cycle. BigBrain reuses logic instances; without this reset
                 // the "if (_target == null)" guard is skipped, RegisterLogic() is never
@@ -128,8 +131,7 @@ namespace Blackhorse311.BotMind.Modules.Looting
                 // v1.4.0 Fix: Reset pose/speed to defaults
                 if (BotOwner != null)
                 {
-                    BotOwner.SetPose(1f);
-                    BotOwner.SetTargetMoveSpeed(1f);
+                    BotOwner.ResetToDefaultStance();
                 }
 
                 BotMindPlugin.Log?.LogDebug($"[{BotOwner?.name ?? "Unknown"}] LootContainerLogic stopped");
@@ -154,9 +156,9 @@ namespace Blackhorse311.BotMind.Modules.Looting
                     lootingData.Layer?.RegisterLogic(this);
                 }
 
+                // BigBrain can call Update with null data on the first frame — wait for ActionData
                 if (_target == null)
                 {
-                    _currentState = State.Complete;
                     return;
                 }
 
@@ -221,6 +223,8 @@ namespace Blackhorse311.BotMind.Modules.Looting
                 // Arrived - start opening container
                 BotOwner.SetPose(0.5f);
                 LookAtContainer();
+                // v1.8.0: Voice line when starting to loot a container
+                BotOwner.BotTalk?.TrySay(EPhraseTrigger.LootContainer, true);
                 _currentState = State.OpeningContainer;
                 return;
             }
@@ -247,6 +251,7 @@ namespace Blackhorse311.BotMind.Modules.Looting
                     {
                         BotMindPlugin.Log?.LogWarning(
                             $"[{BotOwner?.name ?? "Unknown"}] Stuck moving to container ({dist:F1}m away, no progress for {MAX_NO_PROGRESS} attempts). Aborting.");
+                        _hasFailed = true;
                         _currentState = State.Complete;
                         return;
                     }
@@ -260,6 +265,7 @@ namespace Blackhorse311.BotMind.Modules.Looting
                 // v1.6.0 Fix: lookToMovingDirection (5th param) true — prevents backwards walking
                 if (BotOwner.GoToPoint(destination, true, -1f, false, true, true, false, false) != NavMeshPathStatus.PathComplete)
                 {
+                    _hasFailed = true;
                     _currentState = State.Complete;
                 }
             }
@@ -372,10 +378,7 @@ namespace Blackhorse311.BotMind.Modules.Looting
             _curItemIndex = 0;
 
             // Get my containers for receiving items
-            _myContainers.Clear();
-            AddContainerIfNotNull(_myContainers, myEquipment.GetSlot(EquipmentSlot.Backpack)?.ContainedItem as CompoundItem);
-            AddContainerIfNotNull(_myContainers, myEquipment.GetSlot(EquipmentSlot.TacticalVest)?.ContainedItem as CompoundItem);
-            AddContainerIfNotNull(_myContainers, myEquipment.GetSlot(EquipmentSlot.Pockets)?.ContainedItem as CompoundItem);
+            BotInventoryHelper.GetEquipmentContainers(myEquipment, _myContainers);
 
             SetPauseTime(0.3f);
         }
@@ -398,6 +401,7 @@ namespace Blackhorse311.BotMind.Modules.Looting
                     BotMindPlugin.Log?.LogWarning(
                         $"[{BotOwner?.name ?? "Unknown"}] Container loot move timed out after {MOVE_OPERATION_TIMEOUT}s - " +
                         "callback may have failed. Completing container looting to prevent stuck state.");
+                    _isStopped = true; // Review 10 Fix: Silence late callbacks after timeout
                     _moveInProgress = false;
                     _currentState = State.Complete;
                     return;
@@ -462,15 +466,9 @@ namespace Blackhorse311.BotMind.Modules.Looting
             }
         }
 
-        private void AddContainerIfNotNull(List<CompoundItem> list, CompoundItem container)
-        {
-            if (container != null)
-            {
-                list.Add(container);
-            }
-        }
-
         public bool IsComplete => _currentState == State.Complete;
+
+        public bool HasFailed => _hasFailed;
 
         public override void BuildDebugText(StringBuilder stringBuilder)
         {

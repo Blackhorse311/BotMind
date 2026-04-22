@@ -6,6 +6,7 @@ using System.Text;
 using UnityEngine;
 using UnityEngine.AI;
 using Random = UnityEngine.Random;
+using Blackhorse311.BotMind.Modules;
 
 namespace Blackhorse311.BotMind.Modules.Questing
 {
@@ -13,7 +14,7 @@ namespace Blackhorse311.BotMind.Modules.Questing
     /// Logic for exploring an area to discover points of interest.
     /// Generates random patrol points within an area and visits them.
     /// </summary>
-    public class ExploreAreaLogic : CustomLogic
+    public class ExploreAreaLogic : CustomLogic, ICompletableLogic
     {
         private enum State
         {
@@ -56,6 +57,7 @@ namespace Blackhorse311.BotMind.Modules.Questing
             try
             {
                 _currentState = State.SelectingWaypoint;
+                _objective = null; // Reset so RegisterLogic runs on next Update
                 _startTime = Time.time;
                 _waypointsVisited = 0;
                 _maxWaypoints = Random.Range(3, 7);
@@ -76,8 +78,7 @@ namespace Blackhorse311.BotMind.Modules.Questing
                 // v1.4.0 Fix: Reset pose/speed to defaults
                 if (BotOwner != null)
                 {
-                    BotOwner.SetPose(1f);
-                    BotOwner.SetTargetMoveSpeed(1f);
+                    BotOwner.ResetToDefaultStance();
                 }
                 BotMindPlugin.Log?.LogDebug($"[{BotOwner?.name ?? "Unknown"}] ExploreAreaLogic stopped");
                 _cachedNavPath.ClearCorners();
@@ -103,12 +104,11 @@ namespace Blackhorse311.BotMind.Modules.Questing
                     questingData.Layer?.RegisterLogic(this);
                 }
 
-                // If no objective, use bot's current position as center
+                // Review 11 Fix: Return on null data (BigBrain first-frame null ActionData),
+                // consistent with all other logic classes. The objective will arrive next frame.
                 if (_objective == null)
                 {
-                    _centerPosition = BotOwner.Position;
-                    _exploreRadius = DEFAULT_EXPLORE_RADIUS;
-                    _exploreDuration = DEFAULT_EXPLORE_DURATION;
+                    return;
                 }
 
                 // Check if exploration time exceeded
@@ -195,6 +195,8 @@ namespace Blackhorse311.BotMind.Modules.Questing
                 _lookEndTime = Time.time + LOOK_DURATION;
                 _currentState = State.LookingAround;
                 BotOwner.SetPose(0.5f); // Semi-crouch while looking
+                // v1.8.0: Ambient chatter when arriving at exploration waypoint
+                BotOwner.BotTalk?.TrySay(EPhraseTrigger.OnMutter, true);
                 return;
             }
 
@@ -236,6 +238,8 @@ namespace Blackhorse311.BotMind.Modules.Questing
 
         // Sixth Review Fix (Issue 105): Include Failed state in completion check
         public bool IsComplete => _currentState == State.Complete || _currentState == State.Failed;
+
+        public bool HasFailed => false;
 
         public override void BuildDebugText(StringBuilder stringBuilder)
         {

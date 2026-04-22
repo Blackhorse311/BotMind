@@ -12,6 +12,7 @@ This directory contains Architecture Decision Records (ADRs) for the **BotMind**
 | [ADR-004](ADR-004-sain-compatibility.md) | SAIN Compatibility Requirement | Accepted | 2026-01-30 |
 | [ADR-005](ADR-005-mod-name-selection.md) | Mod Name Selection (BotMind) | Accepted | 2026-01-30 |
 | [ADR-006](ADR-006-medicbuddy-feature.md) | MedicBuddy Feature Inclusion | Accepted | 2026-01-30 |
+| [ADR-007](ADR-007-medicbuddy-controller-decomposition.md) | MedicBuddyController Decomposition | Proposed | 2026-03-08 |
 
 ## How to Use
 

@@ -12,6 +12,11 @@ namespace Blackhorse311.BotMind.Interop
     /// <summary>
     /// Provides interop with SAIN mod for accessing bot combat state, hearing, and extraction info.
     /// Uses reflection to avoid hard compile-time dependency on SAIN.dll internals.
+    ///
+    /// THREADING MODEL: All public methods (CanBotQuest, TimeSinceSenseEnemy, IsBotInCombat, etc.)
+    /// must be called from the Unity main thread ONLY. The cached argument arrays are shared mutable
+    /// state with no synchronization. The volatile/lock on Init()/IsSAINLoaded() exists solely because
+    /// BepInEx may call Awake() on a loading thread, but once initialized, all usage is main-thread.
     /// </summary>
     public static class SAINInterop
     {
@@ -25,6 +30,16 @@ namespace Blackhorse311.BotMind.Interop
         // Fifth Review Fix (Issue 51, 52): Lock objects for thread-safe initialization
         private static readonly object _loadCheckLock = new object();
         private static readonly object _initLock = new object();
+
+        // Review 10 Fix: Cached invoke arrays to avoid per-call allocation (3,600 allocs/sec eliminated)
+        // These are reused and overwritten before each invoke — safe because all calls are main-thread-only
+        private static readonly object[] _canBotQuestArgs = new object[3];
+        private static readonly object[] _timeSinceEnemyArgs = new object[1];
+        private static readonly object[] _ignoreHearingArgs = new object[4];
+        private static readonly object[] _getPersonalityArgs = new object[1];
+        private static readonly object[] _extractBotArgs = new object[1];
+        private static readonly object[] _setExfilArgs = new object[1];
+        private static readonly object[] _getExtractedBotsArgs = new object[1];
 
         // Seventh Review Fix (Issue 10): Added volatile for thread-safe visibility
         // These fields are written inside a lock during Init() but read without locking in public methods
@@ -151,7 +166,10 @@ namespace Blackhorse311.BotMind.Interop
 
             try
             {
-                return (bool)_canBotQuestMethod.Invoke(null, new object[] { bot, targetPosition, dotThreshold });
+                _canBotQuestArgs[0] = bot;
+                _canBotQuestArgs[1] = targetPosition;
+                _canBotQuestArgs[2] = dotThreshold;
+                return (bool)_canBotQuestMethod.Invoke(null, _canBotQuestArgs);
             }
             catch (Exception ex)
             {
@@ -177,7 +195,8 @@ namespace Blackhorse311.BotMind.Interop
 
             try
             {
-                return (float)_timeSinceSenseEnemyMethod.Invoke(null, new object[] { bot });
+                _timeSinceEnemyArgs[0] = bot;
+                return (float)_timeSinceSenseEnemyMethod.Invoke(null, _timeSinceEnemyArgs);
             }
             catch (Exception ex)
             {
@@ -207,7 +226,11 @@ namespace Blackhorse311.BotMind.Interop
 
             try
             {
-                return (bool)_ignoreHearingMethod.Invoke(null, new object[] { bot, ignore, ignoreUnderFire, duration });
+                _ignoreHearingArgs[0] = bot;
+                _ignoreHearingArgs[1] = ignore;
+                _ignoreHearingArgs[2] = ignoreUnderFire;
+                _ignoreHearingArgs[3] = duration;
+                return (bool)_ignoreHearingMethod.Invoke(null, _ignoreHearingArgs);
             }
             catch (Exception ex)
             {
@@ -233,7 +256,8 @@ namespace Blackhorse311.BotMind.Interop
 
             try
             {
-                return (string)_getPersonalityMethod.Invoke(null, new object[] { bot });
+                _getPersonalityArgs[0] = bot;
+                return (string)_getPersonalityMethod.Invoke(null, _getPersonalityArgs);
             }
             catch (Exception ex)
             {
@@ -259,7 +283,8 @@ namespace Blackhorse311.BotMind.Interop
 
             try
             {
-                return (bool)_tryExtractBotMethod.Invoke(null, new object[] { bot });
+                _extractBotArgs[0] = bot;
+                return (bool)_tryExtractBotMethod.Invoke(null, _extractBotArgs);
             }
             catch (Exception ex)
             {
@@ -285,7 +310,8 @@ namespace Blackhorse311.BotMind.Interop
 
             try
             {
-                return (bool)_trySetExfilForBotMethod.Invoke(null, new object[] { bot });
+                _setExfilArgs[0] = bot;
+                return (bool)_trySetExfilForBotMethod.Invoke(null, _setExfilArgs);
             }
             catch (Exception ex)
             {
@@ -311,7 +337,8 @@ namespace Blackhorse311.BotMind.Interop
 
             try
             {
-                _getExtractedBotsMethod.Invoke(null, new object[] { list });
+                _getExtractedBotsArgs[0] = list;
+                _getExtractedBotsMethod.Invoke(null, _getExtractedBotsArgs);
                 return true;
             }
             catch (Exception ex)
@@ -329,31 +356,41 @@ namespace Blackhorse311.BotMind.Interop
         /// Check if a bot is currently in a combat state where it shouldn't be interrupted.
         /// </summary>
         /// <param name="bot">The bot to check.</param>
-        /// <param name="safeCombatDelay">Seconds since last enemy sense to consider safe (default 30s).</param>
+        /// <param name="safeCombatDelay">Seconds since last enemy sense to consider safe (default 15s, matches CombatAlertDuration config default).</param>
         /// <returns>True if the bot is in combat and should not be interrupted.</returns>
-        public static bool IsBotInCombat(BotOwner bot, float safeCombatDelay = 30f)
+        public static bool IsBotInCombat(BotOwner bot, float safeCombatDelay = 15f)
         {
             if (bot == null) return false;
 
-            // SAIN-based check: use TimeSinceSenseEnemy for accurate combat awareness
+            // SAIN-based check: use TimeSinceSenseEnemy for accurate combat awareness.
+            // When SAIN is loaded, this is the ONLY reliable combat indicator.
+            // EFT's native GoalEnemy is permanently non-null under SAIN 4.x (always
+            // returns a stale enemy reference even when no enemy is present), so we
+            // must NOT use it when SAIN is available.
             float timeSinceEnemy = TimeSinceSenseEnemy(bot);
             if (timeSinceEnemy < safeCombatDelay)
             {
                 return true;
             }
 
-            // v1.4.0 Fix: Always check native EFT enemy awareness, even with SAIN loaded.
-            // SAIN's TimeSinceSenseEnemy has detection delay — bots can walk past visible
-            // enemies while SAIN's awareness system hasn't processed them yet.
-            // EFT's GoalEnemy is set by the engine's core detection, often faster than SAIN.
             try
             {
-                if (bot.Memory?.GoalEnemy != null) return true;
-                if (bot.Memory?.IsUnderFire == true) return true;
+                // Native EFT checks: only use GoalEnemy/IsUnderFire when SAIN is NOT loaded.
+                // With SAIN 4.x, GoalEnemy is always non-null (permanently blocks questing).
+                if (!IsSAINLoaded())
+                {
+                    if (bot.Memory?.GoalEnemy != null) return true;
+                    if (bot.Memory?.IsUnderFire == true) return true;
+                }
+
+                // Grenade awareness: always check regardless of SAIN presence
+                if (bot.BewareGrenade?.ShallRunAway() == true) return true;
+                if (bot.FlashGrenade?.IsFlashed == true) return true;
             }
-            catch
+            catch (Exception ex)
             {
-                // Memory access can throw if bot is being despawned
+                // Memory/controller access can throw if bot is being despawned
+                BotMindPlugin.Log?.LogDebug($"IsBotInCombat native check failed: {ex.Message}");
             }
 
             return false;

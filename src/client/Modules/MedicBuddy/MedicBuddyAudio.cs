@@ -30,6 +30,8 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
 
         private static bool _initialized;
         private static string _voicelinesPath;
+        /// <summary>Generation counter to prevent stale coroutines from writing to cleared clips.</summary>
+        private static int _generation;
 
         /// <summary>All MedicBuddy audio event names.</summary>
         private static readonly string[] EventNames =
@@ -94,7 +96,7 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
 
                             if (File.Exists(filePath))
                             {
-                                coroutineRunner.StartCoroutine(LoadClip(lang, eventName, i, filePath));
+                                coroutineRunner.StartCoroutine(LoadClip(lang, eventName, i, filePath, _generation));
                             }
                         }
                     }
@@ -171,6 +173,7 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
             }
             _clips.Clear();
             _initialized = false;
+            _generation++; // Invalidate any in-flight LoadClip coroutines
 
             BotMindPlugin.Log?.LogDebug("MedicBuddy audio clips cleaned up");
         }
@@ -206,7 +209,7 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
         /// <summary>
         /// Coroutine that loads a single .ogg file as an AudioClip.
         /// </summary>
-        private static IEnumerator LoadClip(string lang, string eventName, int index, string filePath)
+        private static IEnumerator LoadClip(string lang, string eventName, int index, string filePath, int generation)
         {
             // Unity requires file:// URI for local files
             string uri = "file:///" + filePath.Replace('\\', '/');
@@ -214,6 +217,9 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
             using (UnityWebRequest request = UnityWebRequestMultimedia.GetAudioClip(uri, AudioType.OGGVORBIS))
             {
                 yield return request.SendWebRequest();
+
+                // Review 10 Fix: Check generation to prevent stale coroutines writing to cleared dictionary
+                if (generation != _generation) yield break;
 
                 if (request.result == UnityWebRequest.Result.ConnectionError ||
                     request.result == UnityWebRequest.Result.ProtocolError)
@@ -226,7 +232,7 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
                 try
                 {
                     AudioClip clip = DownloadHandlerAudioClip.GetContent(request);
-                    if (clip != null)
+                    if (clip != null && _clips.ContainsKey(lang))
                     {
                         clip.name = $"MedicBuddy_{lang}_{eventName}_{index + 1}";
                         _clips[lang][eventName][index] = clip;

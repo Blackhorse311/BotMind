@@ -27,6 +27,8 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
             {
                 _startTime = Time.time;
                 _healingComplete = false;
+                // v1.8.0: Voice line when starting to heal
+                BotOwner.BotTalk?.TrySay(EPhraseTrigger.StartHeal, true);
                 BotMindPlugin.Log?.LogInfo($"[{BotOwner?.name ?? "Unknown"}] HealPatientLogic started");
             }
             catch (Exception ex)
@@ -83,6 +85,10 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
                 // Crouch while healing
                 BotOwner.SetPose(0f);
 
+                // v1.8.0: Drive native healing animation (stimulator application)
+                // ManualUpdate handles facing toward target and triggering StartApplyToTarget
+                BotOwner.HealAnotherTarget?.ManualUpdate();
+
                 // Look at the rally point / player position
                 BotOwner.Steering.LookToPoint(targetPos + Vector3.up * 1f);
 
@@ -92,7 +98,7 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
                 if (distanceToTarget > MedicBuddyMedicLayer.HEAL_RANGE)
                 {
                     // Move closer if drifted away
-                    BotOwner.GoToPoint(targetPos, true, -1f, false, false, true, false, false);
+                    BotOwner.GoToPoint(targetPos, true, -1f, false, true, true, false, false);
                 }
             }
             catch (Exception ex)

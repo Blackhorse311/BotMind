@@ -8,6 +8,7 @@ using System.Text;
 using UnityEngine;
 using UnityEngine.AI;
 using Random = UnityEngine.Random;
+using Blackhorse311.BotMind.Modules;
 
 namespace Blackhorse311.BotMind.Modules.Questing
 {
@@ -15,7 +16,7 @@ namespace Blackhorse311.BotMind.Modules.Questing
     /// Logic for searching an area to find a specific item.
     /// Combines movement to search locations with container checking.
     /// </summary>
-    public class FindItemLogic : CustomLogic
+    public class FindItemLogic : CustomLogic, ICompletableLogic
     {
         private enum State
         {
@@ -79,6 +80,7 @@ namespace Blackhorse311.BotMind.Modules.Questing
             try
             {
                 _currentState = State.SelectingSearchLocation;
+                _objective = null; // Reset so RegisterLogic runs on next Update
                 _startTime = Time.time;
                 _locationsSearched = 0;
                 _maxSearchLocations = Random.Range(3, 6);
@@ -99,8 +101,7 @@ namespace Blackhorse311.BotMind.Modules.Questing
                 // v1.4.0 Fix: Reset pose/speed to defaults
                 if (BotOwner != null)
                 {
-                    BotOwner.SetPose(1f);
-                    BotOwner.SetTargetMoveSpeed(1f);
+                    BotOwner.ResetToDefaultStance();
                 }
                 BotMindPlugin.Log?.LogDebug($"[{BotOwner?.name ?? "Unknown"}] FindItemLogic stopped");
                 _nearbyContainers.Clear();
@@ -220,7 +221,7 @@ namespace Blackhorse311.BotMind.Modules.Questing
             if (Time.time >= _nextMoveTime)
             {
                 _nextMoveTime = Time.time + MOVE_UPDATE_INTERVAL;
-                BotOwner.GoToPoint(_currentSearchLocation, true, -1f, false, false, true, false, false);
+                BotOwner.GoToPoint(_currentSearchLocation, true, -1f, false, true, true, false, false);
             }
         }
 
@@ -229,7 +230,8 @@ namespace Blackhorse311.BotMind.Modules.Questing
             _nearbyContainers.Clear();
 
             // Issue 9 Fix: Use OverlapSphereNonAlloc with pre-allocated buffer
-            int colliderCount = Physics.OverlapSphereNonAlloc(BotOwner.Position, SEARCH_RADIUS, _colliderBuffer);
+            // Review 11 Fix: Add interactive layer mask (layer 22) to avoid testing terrain/bullet/player colliders
+            int colliderCount = Physics.OverlapSphereNonAlloc(BotOwner.Position, SEARCH_RADIUS, _colliderBuffer, 1 << 22);
             for (int i = 0; i < colliderCount; i++)
             {
                 var collider = _colliderBuffer[i];
@@ -292,10 +294,7 @@ namespace Blackhorse311.BotMind.Modules.Questing
             }
 
             // Issue 15 Fix: Use cached lists to avoid allocations every frame
-            _containerCache.Clear();
-            AddContainerIfNotNull(_containerCache, equipment.GetSlot(EquipmentSlot.Backpack)?.ContainedItem as CompoundItem);
-            AddContainerIfNotNull(_containerCache, equipment.GetSlot(EquipmentSlot.TacticalVest)?.ContainedItem as CompoundItem);
-            AddContainerIfNotNull(_containerCache, equipment.GetSlot(EquipmentSlot.Pockets)?.ContainedItem as CompoundItem);
+            BotInventoryHelper.GetEquipmentContainers(equipment, _containerCache);
 
             _itemCache.Clear();
             foreach (var container in _containerCache)
@@ -316,15 +315,9 @@ namespace Blackhorse311.BotMind.Modules.Questing
             return false;
         }
 
-        private void AddContainerIfNotNull(List<CompoundItem> list, CompoundItem container)
-        {
-            if (container != null)
-            {
-                list.Add(container);
-            }
-        }
-
         public bool IsComplete => _currentState == State.Complete || _currentState == State.Failed || _currentState == State.ItemFound;
+
+        public bool HasFailed => false;
 
         public override void BuildDebugText(StringBuilder stringBuilder)
         {

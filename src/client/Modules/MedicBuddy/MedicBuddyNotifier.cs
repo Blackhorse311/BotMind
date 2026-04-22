@@ -190,9 +190,24 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
             ShowWarning($"MedicBuddy on cooldown: {remainingSeconds:F0}s remaining");
         }
 
+        public static void WarnSpawning()
+        {
+            ShowWarning("MedicBuddy team is being deployed - stand by...");
+        }
+
         public static void WarnSpawnFailed()
         {
-            ShowWarning("MedicBuddy spawn failed. Try again later.");
+            ShowWarning("MedicBuddy spawn failed - try again in a few seconds.");
+        }
+
+        public static void WarnTeamWipedEarly()
+        {
+            ShowWarning("MedicBuddy team was eliminated before reaching you. You can call again shortly.");
+        }
+
+        public static void WarnTeamWiped()
+        {
+            ShowWarning("MedicBuddy team has been wiped out. You're on your own for now.");
         }
 
         public static void NotifyMedicPromoted()

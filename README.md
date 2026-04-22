@@ -171,7 +171,7 @@ Access mod settings via **F12** (BepInEx Configuration Manager) or edit the conf
 |---------|---------|-------|-------------|
 | Max Bots Per Map | 0 (off) | 0-31 | Override max bots per map. When MedicBuddy is enabled, team-size slots are auto-reserved so your medical team always has room to spawn. **0 = use game defaults** (no override). Example: 31 with Team Size 6 = 25 regular bots + 6 reserved. |
 
-> **Slot Reservation:** When `Max Bots Per Map` is set above 0 and MedicBuddy is enabled, the mod automatically reserves slots equal to your Team Size. Regular bot spawns fill the remaining capacity, and MedicBuddy temporarily uses the full limit during spawning.
+> **Slot Reservation:** When `Max Bots Per Map` is set above 0 and MedicBuddy is enabled, the mod automatically reserves slots equal to your Team Size. Regular bot spawns fill the remaining capacity, and MedicBuddy temporarily uses the full limit during spawning. **If ABPS is installed**, ABPS's per-map limits take priority over this slider. MedicBuddy will still spawn correctly regardless, because it expands the limit above the actual alive bot count at summon time.
 
 #### Hardware Guidance
 
@@ -226,6 +226,7 @@ Press **F6** and select any other preset (e.g., "hard"). Your original SAIN sett
 | **BigBrain 1.4.x** | Required | AI layer framework |
 | **SAIN 3.x** | Recommended | Combat awareness and extraction |
 | **Waypoints** | Recommended | Improved NavMesh data prevents bots from freezing or getting stuck |
+| **ABPS** | Compatible | ABPS manages per-map bot limits and BotMind works alongside it. ABPS's map limits override BotMind's slider, so use ABPS settings for overall bot count. MedicBuddy temporarily expands the limit above the alive bot count to guarantee team spawns, then restores it. |
 | **LootingBots** | Compatible* | BotMind auto-disables its Looting module when LootingBots is detected. MedicBuddy and Questing work normally alongside LootingBots. |
 | **SWAG + Donuts** | Compatible | Bot limit slider works alongside spawn wave mods |
 | **AI Limit** | Compatible | Distance-based AI toggle is independent of spawn limits |
@@ -241,7 +242,7 @@ Press **F6** and select any other preset (e.g., "hard"). Your original SAIN sett
 | Mod doesn't work / strange behavior | **Verify you are on SPT 4.0.12.** This mod does not support 4.0.11 or earlier. Check your SPT version in the launcher. |
 | MedicBuddy not responding to LCtrl+LAlt+F10 | Check mod is enabled in F12 settings. Verify PMC-only setting if playing as Scav. |
 | Medic getting stuck | Move to an open area and press **Y** to set a new CCP. |
-| Team bots not spawning | Check BepInEx console for errors. Ensure BigBrain is installed. |
+| Team bots not spawning | Check BepInEx console for errors. Ensure BigBrain is installed. If using ABPS, update to BotMind v1.8.0+ which accounts for ABPS's starting PMCs spawning above the bot cap. |
 | Bots not looting | Verify looting is enabled. Check search radius and minimum value settings. |
 | Bots walking backwards | Update to v1.6.0+ — this was a movement facing bug fixed in v1.6.0. |
 | Bots walking past enemies | Activate the BotMind SAIN preset (F6 menu). Increase Combat Alert Duration in F12. Install Waypoints mod. |
@@ -327,8 +328,9 @@ Together, we delivered:
 - **Anthropic** - For creating Claude
 
 **Inspiration:**
-- **[DanW](https://github.com/dwesterwick/SPTQuestingBots)** - QuestingBots for SPT 3.x inspired the Questing module
-- **[Skwizzy](https://github.com/Skwizzy/SPT-LootingBots)** - LootingBots for SPT 3.x inspired the Looting module
+- **[DanW (dwesterwick)](https://github.com/dwesterwick/SPTQuestingBots)** - QuestingBots for SPT 3.x was the original questing mod that proved bots could pursue objectives. BotMind's Questing module was inspired by that vision.
+- **[Skwizzy](https://github.com/Skwizzy/SPT-LootingBots)** - LootingBots for SPT 3.x pioneered intelligent bot looting behavior. BotMind's Looting module carries that torch forward for SPT 4.x.
+- **[Ekky](https://forge.sp-tarkov.com/mod/1479/raid-review)** - Raid Review has been invaluable for debugging bot behavior. Being able to replay raids and see exactly what bots did (and didn't do) made BotMind possible. If you mod bot AI, you need this tool.
 
 ### Community Contributors
 

@@ -4,6 +4,7 @@ using System;
 using System.Text;
 using UnityEngine;
 using UnityEngine.AI;
+using Blackhorse311.BotMind.Modules;
 
 namespace Blackhorse311.BotMind.Modules.Questing
 {
@@ -11,7 +12,7 @@ namespace Blackhorse311.BotMind.Modules.Questing
     /// Logic for navigating a bot to a specific location.
     /// Uses BotOwner.GoToPoint() for pathfinding similar to looting navigation.
     /// </summary>
-    public class GoToLocationLogic : CustomLogic
+    public class GoToLocationLogic : CustomLogic, ICompletableLogic
     {
         private enum State
         {
@@ -36,7 +37,10 @@ namespace Blackhorse311.BotMind.Modules.Questing
         private const float STUCK_CHECK_INTERVAL = 5f;
         private const float STUCK_THRESHOLD = 0.5f;
         private const int MAX_STUCK_COUNT = 3;
-        private const int MAX_PATH_FAIL_COUNT = 2;
+        // Review 10 Fix: Increased from 2 to 5 — GoToPoint can fail transiently on the first
+        // few calls while EFT's pathfinder initializes. 2 was too aggressive, causing instant
+        // failure for most bots on every map.
+        private const int MAX_PATH_FAIL_COUNT = 5;
 
         public GoToLocationLogic(BotOwner botOwner) : base(botOwner)
         {
@@ -48,6 +52,7 @@ namespace Blackhorse311.BotMind.Modules.Questing
             try
             {
                 _currentState = State.Moving;
+                _objective = null; // Reset so RegisterLogic runs on next Update
                 _startTime = Time.time;
                 _nextMoveTime = 0f;
                 _stuckCheckTime = Time.time + STUCK_CHECK_INTERVAL;
@@ -71,8 +76,7 @@ namespace Blackhorse311.BotMind.Modules.Questing
                 // v1.4.0 Fix: Reset pose/speed to defaults
                 if (BotOwner != null)
                 {
-                    BotOwner.SetPose(1f);
-                    BotOwner.SetTargetMoveSpeed(1f);
+                    BotOwner.ResetToDefaultStance();
                 }
                 BotMindPlugin.Log?.LogDebug($"[{BotOwner?.name ?? "Unknown"}] GoToLocationLogic stopped");
             }
@@ -96,9 +100,10 @@ namespace Blackhorse311.BotMind.Modules.Questing
                     questingData.Layer?.RegisterLogic(this);
                 }
 
+                // BigBrain can call Update with null data on the first frame.
+                // Wait for proper ActionData before doing anything.
                 if (_objective == null)
                 {
-                    _currentState = State.Failed;
                     return;
                 }
 
@@ -130,6 +135,8 @@ namespace Blackhorse311.BotMind.Modules.Questing
             float distanceToTarget = Vector3.Distance(BotOwner.Position, _targetPosition);
             if (distanceToTarget <= _completionRadius)
             {
+                // v1.8.0: Voice line on arrival at quest objective
+                BotOwner.BotTalk?.TrySay(EPhraseTrigger.OnPosition, true);
                 BotMindPlugin.Log?.LogDebug($"[{BotOwner.name}] Arrived at destination");
                 _currentState = State.Arrived;
                 return;
@@ -196,10 +203,12 @@ namespace Blackhorse311.BotMind.Modules.Questing
                     if (pathResult != NavMeshPathStatus.PathComplete)
                     {
                         _pathFailCount++;
-                        BotMindPlugin.Log?.LogWarning(
+                        // Log intermediate failures at Debug to reduce spam (78+ warnings/raid on Woods)
+                        BotMindPlugin.Log?.LogDebug(
                             $"[{BotOwner.name}] Path to target failed ({_pathFailCount}/{MAX_PATH_FAIL_COUNT}) at {distanceToTarget:F1}m");
                         if (_pathFailCount >= MAX_PATH_FAIL_COUNT)
                         {
+                            // Only the final "unreachable" verdict stays at Warning
                             BotMindPlugin.Log?.LogWarning(
                                 $"[{BotOwner.name}] Navigation failed — target unreachable at {distanceToTarget:F1}m");
                             _currentState = State.Failed;

@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
 using Blackhorse311.BotMind.Interop;
+using Blackhorse311.BotMind.Modules;
 
 namespace Blackhorse311.BotMind.Modules.Questing
 {
@@ -12,7 +13,7 @@ namespace Blackhorse311.BotMind.Modules.Questing
     /// Logic for navigating to an extraction point and extracting.
     /// Integrates with SAIN's extraction system when available.
     /// </summary>
-    public class ExtractLogic : CustomLogic
+    public class ExtractLogic : CustomLogic, ICompletableLogic
     {
         private enum State
         {
@@ -54,6 +55,7 @@ namespace Blackhorse311.BotMind.Modules.Questing
             try
             {
                 _currentState = State.AssigningExfil;
+                _objective = null; // Reset so RegisterLogic runs on next Update
                 _startTime = Time.time;
                 _exfilAssigned = false;
                 _assignAttempts = 0;
@@ -75,8 +77,7 @@ namespace Blackhorse311.BotMind.Modules.Questing
                 // v1.4.0 Fix: Reset pose/speed to defaults
                 if (BotOwner != null)
                 {
-                    BotOwner.SetPose(1f);
-                    BotOwner.SetTargetMoveSpeed(1f);
+                    BotOwner.ResetToDefaultStance();
                 }
                 BotMindPlugin.Log?.LogDebug($"[{BotOwner?.name ?? "Unknown"}] ExtractLogic stopped");
             }
@@ -209,7 +210,7 @@ namespace Blackhorse311.BotMind.Modules.Questing
                 if (Time.time >= _nextMoveTime)
                 {
                     _nextMoveTime = Time.time + MOVE_UPDATE_INTERVAL;
-                    BotOwner.GoToPoint(_objective.TargetPosition, true, -1f, false, false, true, false, false);
+                    BotOwner.GoToPoint(_objective.TargetPosition, true, -1f, false, true, true, false, false);
                 }
             }
         }
@@ -223,6 +224,8 @@ namespace Blackhorse311.BotMind.Modules.Questing
         }
 
         public bool IsComplete => _currentState == State.Complete || _currentState == State.Failed;
+
+        public bool HasFailed => false;
 
         public override void BuildDebugText(StringBuilder stringBuilder)
         {

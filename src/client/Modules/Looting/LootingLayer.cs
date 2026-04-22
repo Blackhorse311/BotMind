@@ -4,6 +4,7 @@ using System;
 using System.Text;
 using Blackhorse311.BotMind.Configuration;
 using Blackhorse311.BotMind.Interop;
+using Blackhorse311.BotMind.Modules;
 using UnityEngine;
 
 namespace Blackhorse311.BotMind.Modules.Looting
@@ -31,10 +32,8 @@ namespace Blackhorse311.BotMind.Modules.Looting
         private float _sessionResetTime;
         private const float SESSION_RESET_DURATION = 120f;
 
-        // Track the current logic instance for communication
-        private LootCorpseLogic _corpseLogic;
-        private LootContainerLogic _containerLogic;
-        private PickupItemLogic _pickupLogic;
+        // Track the current logic instance for completion checking
+        private ICompletableLogic _currentLogic;
 
         // v1.6.0 Fix: Action-level timeout as safety net for loot hang.
         // If the logic's RegisterLogic() call is missed (e.g., BigBrain doesn't pass ActionData),
@@ -119,6 +118,9 @@ namespace Blackhorse311.BotMind.Modules.Looting
             // Sixth Review Fix (Issue 101): Add try-catch to framework callback
             try
             {
+                // Review 10 Fix: Clear stale logic ref before assigning new action
+                _currentLogic = null;
+
                 _currentTarget = _lootFinder.ClaimNextTarget();
                 _currentActionStartTime = Time.time;
                 if (_currentTarget == null)
@@ -160,29 +162,21 @@ namespace Blackhorse311.BotMind.Modules.Looting
             try
             {
             // Check if the current logic is complete.
-            // Note: _*Logic references are set via RegisterLogic(), which is called from the
-            // first Update() frame of each action. If registration races or the logic instance
-            // is reused across cycles, the reference can be null while the logic has already
-            // finished. The null-check guards below are the primary path; the fallback at the
-            // end catches the degenerate case where IsComplete is true but no reference exists.
-            if (_corpseLogic != null && _corpseLogic.IsComplete)
+            // The _currentLogic reference is set via RegisterLogic(), called from the first
+            // Update() frame of each action. If registration races or the logic instance is
+            // reused across cycles, the reference can be null while the logic has already
+            // finished. The timeout fallback below catches that degenerate case.
+            if (_currentLogic != null && _currentLogic.IsComplete)
             {
+                // Blacklist unreachable targets so the bot doesn't retry the same container/corpse
+                if (_currentLogic.HasFailed && _currentTarget != null)
+                {
+                    _lootFinder.BlacklistTarget(_currentTarget.Target);
+                    BotMindPlugin.Log?.LogDebug(
+                        $"[{BotOwner?.name ?? "Unknown"}] Blacklisted unreachable loot target");
+                }
                 _lootFinder.MarkCurrentTargetComplete();
-                _corpseLogic = null;
-                RecordLootCompletion();
-                return true;
-            }
-            if (_containerLogic != null && _containerLogic.IsComplete)
-            {
-                _lootFinder.MarkCurrentTargetComplete();
-                _containerLogic = null;
-                RecordLootCompletion();
-                return true;
-            }
-            if (_pickupLogic != null && _pickupLogic.IsComplete)
-            {
-                _lootFinder.MarkCurrentTargetComplete();
-                _pickupLogic = null;
+                _currentLogic = null;
                 RecordLootCompletion();
                 return true;
             }
@@ -197,9 +191,7 @@ namespace Blackhorse311.BotMind.Modules.Looting
                     $"[{BotOwner?.name ?? "Unknown"}] Looting action timed out after {ACTION_TIMEOUT:F0}s — " +
                     "forcing action end (logic reference may have been lost)");
                 _lootFinder.MarkCurrentTargetComplete();
-                _corpseLogic = null;
-                _containerLogic = null;
-                _pickupLogic = null;
+                _currentLogic = null;
                 RecordLootCompletion();
                 return true;
             }
@@ -214,33 +206,15 @@ namespace Blackhorse311.BotMind.Modules.Looting
             }
         }
 
-        public void RegisterLogic(LootCorpseLogic logic)
+        public void RegisterLogic(ICompletableLogic logic)
         {
-            _corpseLogic = logic;
+            _currentLogic = logic;
             // Issue 13 Fix: Null check before setting target
             if (_currentTarget != null)
             {
-                _corpseLogic.SetTarget(_currentTarget);
-            }
-        }
-
-        public void RegisterLogic(LootContainerLogic logic)
-        {
-            _containerLogic = logic;
-            // Issue 13 Fix: Null check before setting target
-            if (_currentTarget != null)
-            {
-                _containerLogic.SetTarget(_currentTarget);
-            }
-        }
-
-        public void RegisterLogic(PickupItemLogic logic)
-        {
-            _pickupLogic = logic;
-            // Issue 13 Fix: Null check before setting target
-            if (_currentTarget != null)
-            {
-                _pickupLogic.SetTarget(_currentTarget);
+                if (logic is LootCorpseLogic corpse) corpse.SetTarget(_currentTarget);
+                else if (logic is LootContainerLogic container) container.SetTarget(_currentTarget);
+                else if (logic is PickupItemLogic pickup) pickup.SetTarget(_currentTarget);
             }
         }
 
@@ -265,6 +239,9 @@ namespace Blackhorse311.BotMind.Modules.Looting
             // Seventh Review Fix (Issue 149): Add try-catch to framework callback
             try
             {
+                // v1.8.0: Pause EFT's native patrol system while looting to prevent movement conflicts
+                BotOwner?.PatrollingData?.Pause();
+
                 BotMindPlugin.Log?.LogDebug($"[{BotOwner?.name ?? "Unknown"}] LootingLayer started");
             }
             catch (Exception ex)
@@ -281,16 +258,16 @@ namespace Blackhorse311.BotMind.Modules.Looting
                 // v1.4.0 Fix: Reset pose/speed so SAIN/vanilla AI doesn't inherit our values
                 if (BotOwner != null)
                 {
-                    BotOwner.SetPose(1f);
-                    BotOwner.SetTargetMoveSpeed(1f);
+                    BotOwner.ResetToDefaultStance();
                 }
+
+                // v1.8.0: Resume EFT's native patrol system when looting ends
+                BotOwner?.PatrollingData?.Unpause();
 
                 BotMindPlugin.Log?.LogDebug($"[{BotOwner?.name ?? "Unknown"}] LootingLayer stopped");
                 // Third Review Fix: Call Cleanup instead of just ClearTargets for full resource cleanup
                 _lootFinder.Cleanup();
-                _corpseLogic = null;
-                _containerLogic = null;
-                _pickupLogic = null;
+                _currentLogic = null;
             }
             catch (Exception ex)
             {

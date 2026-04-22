@@ -31,6 +31,9 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
                 _startTime = Time.time;
                 _nextMoveTime = 0f;
                 _arrived = false;
+                // v1.8.0: Sprint to patient and call out
+                BotOwner?.Mover?.Sprint(true);
+                BotOwner.BotTalk?.TrySay(EPhraseTrigger.Gogogo, true);
                 BotMindPlugin.Log?.LogInfo($"[{BotOwner?.name ?? "Unknown"}] MoveToPatientLogic started");
             }
             catch (Exception ex)
@@ -44,6 +47,8 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
             // Healthcare-grade: Wrap framework callback in try-catch
             try
             {
+                // v1.8.0: Ensure sprint is off when logic stops
+                BotOwner?.Mover?.Sprint(false);
                 BotMindPlugin.Log?.LogDebug($"[{BotOwner?.name ?? "Unknown"}] MoveToPatientLogic stopped");
             }
             catch (Exception ex)
@@ -75,6 +80,9 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
                 if (distanceToTarget <= ARRIVAL_DISTANCE)
                 {
                     _arrived = true;
+                    // v1.8.0: Stop sprinting on arrival, voice acknowledgement
+                    BotOwner?.Mover?.Sprint(false);
+                    BotOwner.BotTalk?.TrySay(EPhraseTrigger.OnPosition, true);
                     BotOwner.SetPose(0.5f); // Semi-crouch when arrived
                     BotOwner.Steering.LookToPoint(targetPos + Vector3.up * 1.5f);
                     return;
@@ -85,7 +93,6 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
                 // Movement settings - sprint when far away
                 BotOwner.SetPose(1f);
                 BotOwner.SetTargetMoveSpeed(distanceToTarget > 20f ? 1f : 0.7f);
-                BotOwner.Steering.LookToMovingDirection();
 
                 // Update path periodically
                 if (Time.time >= _nextMoveTime)
@@ -101,7 +108,7 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
                         destination = hit.position;
                     }
 
-                    BotOwner.GoToPoint(destination, true, -1f, false, false, true, false, false);
+                    BotOwner.GoToPoint(destination, true, -1f, false, true, true, false, false);
                 }
             }
             catch (Exception ex)

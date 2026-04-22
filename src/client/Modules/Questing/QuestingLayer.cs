@@ -4,6 +4,7 @@ using System;
 using System.Text;
 using Blackhorse311.BotMind.Configuration;
 using Blackhorse311.BotMind.Interop;
+using Blackhorse311.BotMind.Modules;
 using UnityEngine;
 
 namespace Blackhorse311.BotMind.Modules.Questing
@@ -26,11 +27,7 @@ namespace Blackhorse311.BotMind.Modules.Questing
         private bool _inCooldown;
 
         // Track current logic for completion checking
-        private GoToLocationLogic _goToLogic;
-        private ExploreAreaLogic _exploreLogic;
-        private ExtractLogic _extractLogic;
-        private FindItemLogic _findItemLogic;
-        private PlaceItemLogic _placeItemLogic;
+        private ICompletableLogic _currentLogic;
 
         public QuestingLayer(BotOwner botOwner, int priority) : base(botOwner, priority)
         {
@@ -121,6 +118,9 @@ namespace Blackhorse311.BotMind.Modules.Questing
             // Seventh Review Fix (Issue 4): Add try-catch to framework callback for consistency
             try
             {
+                // Clear stale logic ref before assigning new action (fixes W2 stale refs)
+                _currentLogic = null;
+
                 // v1.5.0 Fix: During cooldown, explore locally instead of deactivating the layer.
                 // This keeps the layer active (preventing EFT brain takeover) while giving
                 // the bot a natural pause between objectives.
@@ -173,19 +173,19 @@ namespace Blackhorse311.BotMind.Modules.Questing
             {
                 // v1.5.0 Fix: If cooldown just ended, end the pause action so
                 // GetNextAction can pick the real next objective
-                if (!_inCooldown && _exploreLogic != null && _questManager.HasActiveObjective)
+                if (!_inCooldown && _currentLogic != null && _questManager.HasActiveObjective)
                 {
                     // Cooldown ended and we have a real objective — switch from pause explore
-                    _exploreLogic = null;
+                    _currentLogic = null;
                     return true;
                 }
 
-                // Check if any logic reports complete
-                if (_goToLogic != null && _goToLogic.IsComplete)
+                // Check if current logic reports complete
+                if (_currentLogic != null && _currentLogic.IsComplete)
                 {
                     // v1.7.0 Fix: Distinguish success from nav failure so QuestManager can
                     // track consecutive failures and skip unreachable distance tiers
-                    if (_goToLogic.HasFailed)
+                    if (_currentLogic.HasFailed)
                     {
                         _questManager.MarkCurrentObjectiveFailed();
                     }
@@ -193,35 +193,7 @@ namespace Blackhorse311.BotMind.Modules.Questing
                     {
                         _questManager.MarkCurrentObjectiveComplete();
                     }
-                    _goToLogic = null;
-                    _lastObjectiveCompleteTime = Time.time;
-                    return true;
-                }
-                if (_exploreLogic != null && _exploreLogic.IsComplete)
-                {
-                    _questManager.MarkCurrentObjectiveComplete();
-                    _exploreLogic = null;
-                    _lastObjectiveCompleteTime = Time.time;
-                    return true;
-                }
-                if (_extractLogic != null && _extractLogic.IsComplete)
-                {
-                    _questManager.MarkCurrentObjectiveComplete();
-                    _extractLogic = null;
-                    _lastObjectiveCompleteTime = Time.time;
-                    return true;
-                }
-                if (_findItemLogic != null && _findItemLogic.IsComplete)
-                {
-                    _questManager.MarkCurrentObjectiveComplete();
-                    _findItemLogic = null;
-                    _lastObjectiveCompleteTime = Time.time;
-                    return true;
-                }
-                if (_placeItemLogic != null && _placeItemLogic.IsComplete)
-                {
-                    _questManager.MarkCurrentObjectiveComplete();
-                    _placeItemLogic = null;
+                    _currentLogic = null;
                     _lastObjectiveCompleteTime = Time.time;
                     return true;
                 }
@@ -235,29 +207,9 @@ namespace Blackhorse311.BotMind.Modules.Questing
             }
         }
 
-        public void RegisterLogic(GoToLocationLogic logic)
+        public void RegisterLogic(ICompletableLogic logic)
         {
-            _goToLogic = logic;
-        }
-
-        public void RegisterLogic(ExploreAreaLogic logic)
-        {
-            _exploreLogic = logic;
-        }
-
-        public void RegisterLogic(ExtractLogic logic)
-        {
-            _extractLogic = logic;
-        }
-
-        public void RegisterLogic(FindItemLogic logic)
-        {
-            _findItemLogic = logic;
-        }
-
-        public void RegisterLogic(PlaceItemLogic logic)
-        {
-            _placeItemLogic = logic;
+            _currentLogic = logic;
         }
 
         public override void Start()
@@ -265,6 +217,9 @@ namespace Blackhorse311.BotMind.Modules.Questing
             // Seventh Review Fix (Issue 141): Add try-catch to framework callback
             try
             {
+                // v1.8.0: Pause EFT's native patrol system while questing to prevent movement conflicts
+                BotOwner?.PatrollingData?.Pause();
+
                 BotMindPlugin.Log?.LogDebug($"[{BotOwner?.name ?? "Unknown"}] QuestingLayer started");
             }
             catch (Exception ex)
@@ -283,9 +238,9 @@ namespace Blackhorse311.BotMind.Modules.Questing
                 // Stop() is called before IsCurrentActionEnding() can detect the failure.
                 // Without this, GoToLogic nav failures are lost and _consecutiveNavFailures
                 // never increments past 1, preventing tier-skip from working (Bot47 loop).
-                if (_goToLogic != null && _goToLogic.IsComplete)
+                if (_currentLogic != null && _currentLogic.IsComplete)
                 {
-                    if (_goToLogic.HasFailed)
+                    if (_currentLogic.HasFailed)
                     {
                         _questManager.MarkCurrentObjectiveFailed();
                     }
@@ -295,40 +250,18 @@ namespace Blackhorse311.BotMind.Modules.Questing
                     }
                     _lastObjectiveCompleteTime = Time.time;
                 }
-                else if (_exploreLogic != null && _exploreLogic.IsComplete)
-                {
-                    _questManager.MarkCurrentObjectiveComplete();
-                    _lastObjectiveCompleteTime = Time.time;
-                }
-                else if (_extractLogic != null && _extractLogic.IsComplete)
-                {
-                    _questManager.MarkCurrentObjectiveComplete();
-                    _lastObjectiveCompleteTime = Time.time;
-                }
-                else if (_findItemLogic != null && _findItemLogic.IsComplete)
-                {
-                    _questManager.MarkCurrentObjectiveComplete();
-                    _lastObjectiveCompleteTime = Time.time;
-                }
-                else if (_placeItemLogic != null && _placeItemLogic.IsComplete)
-                {
-                    _questManager.MarkCurrentObjectiveComplete();
-                    _lastObjectiveCompleteTime = Time.time;
-                }
 
                 // v1.4.0 Fix: Reset pose/speed so SAIN/vanilla AI doesn't inherit our values
                 if (BotOwner != null)
                 {
-                    BotOwner.SetPose(1f);
-                    BotOwner.SetTargetMoveSpeed(1f);
+                    BotOwner.ResetToDefaultStance();
                 }
 
+                // v1.8.0: Resume EFT's native patrol system when questing ends
+                BotOwner?.PatrollingData?.Unpause();
+
                 BotMindPlugin.Log?.LogDebug($"[{BotOwner?.name ?? "Unknown"}] QuestingLayer stopped");
-                _goToLogic = null;
-                _exploreLogic = null;
-                _extractLogic = null;
-                _findItemLogic = null;
-                _placeItemLogic = null;
+                _currentLogic = null;
             }
             catch (Exception ex)
             {

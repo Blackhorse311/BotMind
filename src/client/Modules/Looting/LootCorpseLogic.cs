@@ -7,6 +7,7 @@ using System.Reflection;
 using System.Text;
 using UnityEngine;
 using UnityEngine.AI;
+using Blackhorse311.BotMind.Modules;
 
 namespace Blackhorse311.BotMind.Modules.Looting
 {
@@ -14,7 +15,7 @@ namespace Blackhorse311.BotMind.Modules.Looting
     /// Logic for a bot to loot a corpse.
     /// Based on BotDeadBodyWork state machine pattern from EFT.
     /// </summary>
-    public class LootCorpseLogic : CustomLogic
+    public class LootCorpseLogic : CustomLogic, ICompletableLogic
     {
         private enum State
         {
@@ -82,7 +83,7 @@ namespace Blackhorse311.BotMind.Modules.Looting
 
         // Seventh Review Fix (Issue 167): Static comparison delegate to avoid lambda allocation in Sort
         private static readonly System.Comparison<(float Weight, Item Item)> _weightComparer =
-            (a, b) => -1 * a.Weight.CompareTo(b.Weight);
+            (a, b) => b.Weight.CompareTo(a.Weight);
 
         public LootCorpseLogic(BotOwner botOwner) : base(botOwner)
         {
@@ -137,8 +138,7 @@ namespace Blackhorse311.BotMind.Modules.Looting
                 // v1.4.0 Fix: Reset pose/speed to defaults (was leaving bots crouched)
                 if (BotOwner != null)
                 {
-                    BotOwner.SetPose(1f);
-                    BotOwner.SetTargetMoveSpeed(1f);
+                    BotOwner.ResetToDefaultStance();
                 }
 
                 BotMindPlugin.Log?.LogDebug($"[{BotOwner?.name ?? "Unknown"}] LootCorpseLogic stopped");
@@ -164,9 +164,9 @@ namespace Blackhorse311.BotMind.Modules.Looting
                     lootingData.Layer?.RegisterLogic(this);
                 }
 
+                // BigBrain can call Update with null data on the first frame — wait for ActionData
                 if (_target == null)
                 {
-                    _currentState = State.Complete;
                     return;
                 }
 
@@ -240,6 +240,8 @@ namespace Blackhorse311.BotMind.Modules.Looting
                 // Arrived - start looting
                 BotOwner.SetPose(0f); // Crouch
                 LookAtCorpse();
+                // v1.8.0: Voice line when starting to loot a body
+                BotOwner.BotTalk?.TrySay(EPhraseTrigger.LootBody, true);
                 _currentState = State.Initial;
                 return;
             }
@@ -393,12 +395,9 @@ namespace Blackhorse311.BotMind.Modules.Looting
             }
 
             _itemsCache.Clear();
-            _containersCache.Clear();
 
             // Gather items from corpse's containers
-            AddContainerIfNotNull(_containersCache, corpseEquipment.GetSlot(EquipmentSlot.Backpack)?.ContainedItem as CompoundItem);
-            AddContainerIfNotNull(_containersCache, corpseEquipment.GetSlot(EquipmentSlot.TacticalVest)?.ContainedItem as CompoundItem);
-            AddContainerIfNotNull(_containersCache, corpseEquipment.GetSlot(EquipmentSlot.Pockets)?.ContainedItem as CompoundItem);
+            BotInventoryHelper.GetEquipmentContainers(corpseEquipment, _containersCache);
 
             foreach (var container in _containersCache)
             {
@@ -449,10 +448,7 @@ namespace Blackhorse311.BotMind.Modules.Looting
             _curItemIndex = 0;
 
             // Get my containers for receiving items
-            _containersCache.Clear();
-            AddContainerIfNotNull(_containersCache, myEquipment.GetSlot(EquipmentSlot.Backpack)?.ContainedItem as CompoundItem);
-            AddContainerIfNotNull(_containersCache, myEquipment.GetSlot(EquipmentSlot.TacticalVest)?.ContainedItem as CompoundItem);
-            AddContainerIfNotNull(_containersCache, myEquipment.GetSlot(EquipmentSlot.Pockets)?.ContainedItem as CompoundItem);
+            BotInventoryHelper.GetEquipmentContainers(myEquipment, _containersCache);
 
             SetPauseTime(CHECK_ITEMS_DELAY);
             _currentState = State.LootAllItemsMoving;
@@ -481,6 +477,7 @@ namespace Blackhorse311.BotMind.Modules.Looting
                     BotMindPlugin.Log?.LogWarning(
                         $"[{BotOwner?.name ?? "Unknown"}] Move operation timed out after {MOVE_OPERATION_TIMEOUT}s - " +
                         "callback may have failed. Aborting corpse looting to prevent stuck state.");
+                    _isStopped = true; // Review 10 Fix: Silence late callbacks after timeout
                     _moveInProgress = false;
                     _currentState = State.Complete;
                     return;
@@ -588,15 +585,9 @@ namespace Blackhorse311.BotMind.Modules.Looting
             }
         }
 
-        private void AddContainerIfNotNull(List<CompoundItem> list, CompoundItem container)
-        {
-            if (container != null)
-            {
-                list.Add(container);
-            }
-        }
-
         public bool IsComplete => _currentState == State.Complete;
+
+        public bool HasFailed => false;
 
         public override void BuildDebugText(StringBuilder stringBuilder)
         {

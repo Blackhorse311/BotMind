@@ -887,11 +887,11 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
                     if (NavMesh.SamplePosition(targetPos, out NavMeshHit hit, SPAWN_NAVMESH_SAMPLE_RADIUS, NavMesh.AllAreas) &&
                         Mathf.Abs(hit.position.y - _spawnPosition.y) <= MAX_SPAWN_HEIGHT_DIFF)
                     {
-                        bot.Transform.position = hit.position;
+                        TeleportBot(bot, hit.position);
                     }
                     else
                     {
-                        bot.Transform.position = _spawnPosition;
+                        TeleportBot(bot, _spawnPosition);
                     }
                     BotMindPlugin.Log?.LogInfo($"[{bot.name}] Positioned at {bot.Transform.position}");
                 }
@@ -1849,7 +1849,7 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
                     {
                         if (Mathf.Abs(hit.position.y - playerPos.y) <= MAX_SPAWN_HEIGHT_DIFF)
                         {
-                            bot.Transform.position = hit.position;
+                            TeleportBot(bot, hit.position);
                             BotMindPlugin.Log?.LogInfo(
                                 $"[{bot.name}] Teleported to {hit.position} (was stuck)");
                             return;
@@ -1861,14 +1861,14 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
                 Vector3 behindPlayer = playerPos - playerForward * 2f;
                 if (NavMesh.SamplePosition(behindPlayer, out NavMeshHit fallbackHit, 3f, NavMesh.AllAreas))
                 {
-                    bot.Transform.position = fallbackHit.position;
+                    TeleportBot(bot, fallbackHit.position);
                     BotMindPlugin.Log?.LogInfo(
                         $"[{bot.name}] Teleported to fallback position {fallbackHit.position}");
                 }
                 else
                 {
                     // No valid NavMesh at all - place at player position directly
-                    bot.Transform.position = playerPos;
+                    TeleportBot(bot, playerPos);
                     BotMindPlugin.Log?.LogWarning(
                         $"[{bot.name}] No NavMesh near player - placed at player position");
                 }
@@ -1878,6 +1878,30 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
                 BotMindPlugin.Log?.LogWarning(
                     $"[{bot.name}] Teleport failed: {ex.Message}\n{ex.StackTrace}");
             }
+        }
+
+        /// <summary>
+        /// Relocates a bot to a position, warping its NavMeshAgent so it doesn't keep
+        /// pathing from its old location (the cause of "walking sideways / stuck" - GitHub #11/#12).
+        /// Mirrors EFT's own BotsController relocation: stop the mover, then Mover.Teleport,
+        /// which internally calls Player.Teleport and warps the agent. Falls back to a direct
+        /// Transform write only if the Mover isn't available yet.
+        /// </summary>
+        private static void TeleportBot(BotOwner bot, Vector3 position)
+        {
+            if (bot == null) return;
+
+            if (bot.Mover != null)
+            {
+                bot.Mover.Stop();
+                bot.Mover.Teleport(position);
+                return;
+            }
+
+            // Mover not activated yet (can happen right at spawn): fall back to a raw
+            // transform write. The agent will be synced once the mover comes online.
+            if (bot.Transform != null)
+                bot.Transform.position = position;
         }
 
         private void UpdateDefending()

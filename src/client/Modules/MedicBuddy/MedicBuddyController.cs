@@ -2346,12 +2346,17 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
                 return;
             }
 
-            // Phase 1: On the first tick, remove all negative effects and restore destroyed limbs.
-            // This must happen before HP healing so bleeds/fractures don't drain HP back down.
+            // Phase 1a: Clear negative effects on EVERY tick. Clearing is idempotent and cheap,
+            // and the heal runs over several ticks — if the player picks up a fresh bleed or
+            // fracture mid-treatment (e.g. taking fire while the medic works), a once-only clear
+            // would let that new effect survive a "fully healed" verdict and keep draining HP.
+            ClearNegativeEffects(activeHC);
+
+            // Phase 1b: Restore destroyed limbs only once. Unlike effect-clearing, RestoreBodyPart
+            // applies a permanent HP penalty, so it must not repeat across ticks.
             if (!_effectsCleared)
             {
                 _effectsCleared = true;
-                ClearNegativeEffects(activeHC);
                 RestoreDestroyedLimbs(activeHC);
             }
 

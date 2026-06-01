@@ -189,6 +189,20 @@ namespace Blackhorse311.BotMind.Interop
         /// <returns>Time in seconds, or float.MaxValue if no enemy sensed or SAIN unavailable.</returns>
         public static float TimeSinceSenseEnemy(BotOwner bot)
         {
+            return TimeSinceSenseEnemy(bot, out _);
+        }
+
+        /// <summary>
+        /// Overload that also reports whether the SAIN call faulted, so callers can tell a
+        /// genuine "no enemy" (MaxValue, faulted=false) apart from a broken SAIN integration
+        /// (MaxValue, faulted=true) and fail closed instead of assuming peace.
+        /// </summary>
+        /// <param name="bot">The bot to check.</param>
+        /// <param name="faulted">True if SAIN was loaded but the reflected call threw.</param>
+        /// <returns>Time in seconds, or float.MaxValue if no enemy sensed or SAIN unavailable.</returns>
+        public static float TimeSinceSenseEnemy(BotOwner bot, out bool faulted)
+        {
+            faulted = false;
             if (bot == null) return float.MaxValue;
             if (!Init()) return float.MaxValue;
             if (_timeSinceSenseEnemyMethod == null) return float.MaxValue;
@@ -200,6 +214,9 @@ namespace Blackhorse311.BotMind.Interop
             }
             catch (Exception ex)
             {
+                // SAIN is loaded but its API threw — signal the fault so combat checks can
+                // fall back to native EFT awareness rather than treating the bot as safe.
+                faulted = true;
                 // Standards Compliance Fix: Error messages with WHAT/WHY/HOW per ERROR_HANDLING.md
                 BotMindPlugin.Log?.LogWarning(
                     $"SAINInterop.TimeSinceSenseEnemy failed for bot '{bot?.name ?? "null"}': {ex.Message}. " +
@@ -367,7 +384,7 @@ namespace Blackhorse311.BotMind.Interop
             // EFT's native GoalEnemy is permanently non-null under SAIN 4.x (always
             // returns a stale enemy reference even when no enemy is present), so we
             // must NOT use it when SAIN is available.
-            float timeSinceEnemy = TimeSinceSenseEnemy(bot);
+            float timeSinceEnemy = TimeSinceSenseEnemy(bot, out bool sainFaulted);
             if (timeSinceEnemy < safeCombatDelay)
             {
                 return true;
@@ -375,9 +392,12 @@ namespace Blackhorse311.BotMind.Interop
 
             try
             {
-                // Native EFT checks: only use GoalEnemy/IsUnderFire when SAIN is NOT loaded.
-                // With SAIN 4.x, GoalEnemy is always non-null (permanently blocks questing).
-                if (!IsSAINLoaded())
+                // Native EFT checks: use GoalEnemy/IsUnderFire when SAIN is NOT loaded, OR
+                // when SAIN is loaded but its API threw (sainFaulted). A broken SAIN must not
+                // make us assume peace and quest mid-firefight — fail closed to native awareness.
+                // (When SAIN works, GoalEnemy is always non-null and would wrongly block questing,
+                // which is why we skip it on the healthy-SAIN path.)
+                if (!IsSAINLoaded() || sainFaulted)
                 {
                     if (bot.Memory?.GoalEnemy != null) return true;
                     if (bot.Memory?.IsUnderFire == true) return true;

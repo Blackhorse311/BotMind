@@ -31,7 +31,6 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
         private const float LOOK_UPDATE_INTERVAL = 3f;
         private const float SCAN_INTERVAL = 1f;
         private const float THREAT_DETECTION_RADIUS = 80f;
-        private const int MAX_TRACKED_THREATS = 4;
         private const float POSITION_THRESHOLD = 2f;
         /// <summary>Minimum squared magnitude to consider a direction vector valid (prevents NaN from normalizing zero).</summary>
         private const float MIN_DIRECTION_SQR_MAGNITUDE = 0.01f;

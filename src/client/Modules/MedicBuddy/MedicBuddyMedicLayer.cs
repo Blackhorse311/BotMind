@@ -15,8 +15,6 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
         private MedicBuddyController _controller;
         private MedicState _medicState = MedicState.Idle;
         private MoveToPatientLogic _moveLogic;
-        private HealPatientLogic _healLogic;
-        private FollowTeamLogic _retreatLogic;
 
         // Issue 18 Fix: Extract magic number to named constant
         // Sixth Review Fix (Issue 108): Made public for shared access by HealPatientLogic
@@ -204,8 +202,6 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
                 BotMindPlugin.Log?.LogDebug($"[{BotOwner?.name ?? "Unknown"}] MedicBuddyMedicLayer stopped");
                 _medicState = MedicState.Idle;
                 _moveLogic = null;
-                _healLogic = null;
-                _retreatLogic = null;
             }
             catch (Exception ex)
             {
@@ -217,10 +213,6 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
         {
             if (logic is MoveToPatientLogic move)
                 _moveLogic = move;
-            else if (logic is HealPatientLogic heal)
-                _healLogic = heal;
-            else if (logic is FollowTeamLogic retreat)
-                _retreatLogic = retreat;
         }
 
         public override void BuildDebugText(StringBuilder stringBuilder)

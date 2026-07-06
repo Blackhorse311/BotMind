@@ -14,8 +14,6 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
     {
         private MedicBuddyController _controller;
         private ShooterState _shooterState = ShooterState.Idle;
-        private DefendPerimeterLogic _defendLogic;
-        private FollowTeamLogic _retreatLogic;
 
         private enum ShooterState
         {
@@ -176,21 +174,11 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
             {
                 BotMindPlugin.Log?.LogDebug($"[{BotOwner?.name ?? "Unknown"}] MedicBuddyShooterLayer stopped");
                 _shooterState = ShooterState.Idle;
-                _defendLogic = null;
-                _retreatLogic = null;
             }
             catch (Exception ex)
             {
                 BotMindPlugin.Log?.LogError($"[{BotOwner?.name ?? "Unknown"}] MedicBuddyShooterLayer.Stop error: {ex.Message}\n{ex.StackTrace}");
             }
-        }
-
-        public void RegisterLogic(CustomLogic logic)
-        {
-            if (logic is DefendPerimeterLogic defend)
-                _defendLogic = defend;
-            else if (logic is FollowTeamLogic retreat)
-                _retreatLogic = retreat;
         }
 
         public override void BuildDebugText(StringBuilder stringBuilder)

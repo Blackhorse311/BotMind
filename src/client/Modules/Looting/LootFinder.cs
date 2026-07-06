@@ -448,13 +448,6 @@ namespace Blackhorse311.BotMind.Modules.Looting
             return null;
         }
 
-        /// <summary>
-        /// Legacy method name - use ClaimNextTarget() instead.
-        /// Kept for backwards compatibility with existing layer code.
-        /// </summary>
-        [Obsolete("Use ClaimNextTarget() instead - this method mutates state")]
-        public LootTarget GetBestLootTarget() => ClaimNextTarget();
-
         /// <summary>Clears all targets and current target reference.</summary>
         public void ClearTargets()
         {

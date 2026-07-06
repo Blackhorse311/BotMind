@@ -109,8 +109,6 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
             }
         }
 
-        public bool IsHealingComplete => _healingComplete;
-
         public override void BuildDebugText(StringBuilder stringBuilder)
         {
             var controller = MedicBuddyController.Instance;

@@ -112,8 +112,6 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
         private const float BOT_SPREAD_RADIUS = 3f;
         /// <summary>Maximum search radius for NavMesh.SamplePosition when placing bots.</summary>
         private const float SPAWN_NAVMESH_SAMPLE_RADIUS = 5f;
-        /// <summary>Timeout for the ActivateBot async call before aborting (seconds).</summary>
-        private const float ACTIVATE_BOT_TIMEOUT = 30f;
         /// <summary>Duration of spawn invulnerability to survive until friendship registers (seconds).</summary>
         private const float SPAWN_INVULNERABILITY_DURATION = 10f;
 
@@ -1363,54 +1361,6 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
                 }
             }
             return closest;
-        }
-
-        /// <summary>
-        /// Gets zone names sorted by distance to the given position.
-        /// Returns up to <paramref name="count"/> unique zones so each bot spawns
-        /// in a different zone, avoiding ABPS's per-zone scav cap.
-        /// The bot is teleported to _spawnPosition in OnBotCreated anyway,
-        /// so the zone only needs to be valid, not optimal.
-        /// </summary>
-        private static List<string> GetZoneNamesSortedByDistance(BotSpawner spawner, Vector3 position, int count)
-        {
-            var result = new List<string>();
-            try
-            {
-                var zones = spawner?.AllBotZones;
-                if (zones == null)
-                {
-                    result.Add("");
-                    return result;
-                }
-
-                // Build list of (name, distance) pairs
-                var zoneDistances = new List<(string name, float dist)>();
-                foreach (var zone in zones)
-                {
-                    if (zone == null || string.IsNullOrEmpty(zone.NameZone)) continue;
-                    float dist = (zone.transform.position - position).sqrMagnitude;
-                    zoneDistances.Add((zone.NameZone, dist));
-                }
-
-                // Sort by distance (closest first)
-                zoneDistances.Sort((a, b) => a.dist.CompareTo(b.dist));
-
-                // Take up to count unique zones
-                for (int i = 0; i < zoneDistances.Count && result.Count < count; i++)
-                {
-                    result.Add(zoneDistances[i].name);
-                }
-            }
-            catch
-            {
-                // Fallback
-            }
-
-            if (result.Count == 0)
-                result.Add("");
-
-            return result;
         }
 
         private Vector3 CalculateSpawnPosition()

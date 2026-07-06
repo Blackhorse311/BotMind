@@ -70,14 +70,27 @@ public class MedicBuddyRouter : StaticRouter
     {
       try
       {
+            // Network boundary: deserialized fields can arrive null despite non-null defaults
+            if (request == null)
+            {
+                _logger.LogWarning("[BotMind] Escort request body missing or malformed - returning empty profile list");
+                return new ValueTask<string>(_jsonUtil.Serialize(new List<object>()) ?? "[]");
+            }
+
+            if (request.Side == null)
+            {
+                _logger.LogWarning("[BotMind] Escort request has null 'side' - defaulting to usec");
+            }
+            string requestSide = request.Side ?? "usec";
+
             _logger.LogInformation(
                 "[BotMind] Generating {Count} escort PMC profiles (side={Side}, diff={Diff}, level={Level})",
-                request.Count, request.Side, request.Difficulty, request.PlayerLevel);
+                request.Count, requestSide, request.Difficulty, request.PlayerLevel);
 
             var profiles = new List<object>();
-            string role = request.Side.Equals("bear", StringComparison.OrdinalIgnoreCase)
+            string role = requestSide.Equals("bear", StringComparison.OrdinalIgnoreCase)
                 ? "pmcBEAR" : "pmcUSEC";
-            string side = request.Side.Equals("bear", StringComparison.OrdinalIgnoreCase)
+            string side = requestSide.Equals("bear", StringComparison.OrdinalIgnoreCase)
                 ? "Bear" : "Usec";
 
             for (int i = 0; i < Math.Min(request.Count, 6); i++)
@@ -91,8 +104,8 @@ public class MedicBuddyRouter : StaticRouter
                     BotCountToGenerate = 1,
                     PlayerLevel = request.PlayerLevel,
                     IsPlayerScav = false,
-                    Location = request.Location,
-                    GameVersion = request.GameVersion,
+                    Location = request.Location ?? "",
+                    GameVersion = request.GameVersion ?? "",
                 };
 
                 var bot = _botGenerator.PrepareAndGenerateBot(sessionId, details);
@@ -111,12 +124,12 @@ public class MedicBuddyRouter : StaticRouter
             _logger.LogInformation("[BotMind] Generated {Count}/{Requested} escort profiles",
                 profiles.Count, request.Count);
 
-            return new ValueTask<string>(_jsonUtil.Serialize(profiles));
+            return new ValueTask<string>(_jsonUtil.Serialize(profiles) ?? "[]");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "[BotMind] Failed to generate escort profiles");
-            return new ValueTask<string>(_jsonUtil.Serialize(new List<object>()));
+            return new ValueTask<string>(_jsonUtil.Serialize(new List<object>()) ?? "[]");
         }
     }
 }

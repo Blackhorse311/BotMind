@@ -346,6 +346,24 @@ Together, we delivered:
 
 ## Changelog
 
+### v1.8.0 (2026-04-22)
+- **New:** Escort team now spawns as real PMC profiles — server mod generates them via a new `/botmind/generate-escort` endpoint with proper gear, skills, and appearance scaled to your level and faction
+- **New:** ABPS compatibility — bot limit handling rewritten to just-in-time expansion: the live bot cap is raised by team size at summon time and restored after spawning, instead of pre-reserving slots at raid start (which other bot limit mods overwrote)
+- **New:** Smart medical check — the team won't respond unless you're actually injured and lack the meds to treat those injuries yourself
+- **New:** Summon keybind is now order-independent (any way you hold Ctrl+Alt+F10 works)
+- **Fix:** Team bots get brief spawn invulnerability so hostile AI can't kill them before friendship registers
+- **Fix:** Friendship refresh loop keeps team bots friendly for the whole mission (counters teamkill-style mods re-flagging them)
+- **Fix:** Leash distance (50m) teleports bots back if NavMesh detours drag them far from the team
+- **Fix:** Failed spawns and early team wipes now trigger a short 15s cooldown instead of the full one
+- **New:** Verbose Logging toggle for troubleshooting spawn/loot/quest issues
+- 72 new unit tests (292 total)
+
+### v1.7.0 (2026-03-03)
+- **Fix:** Bots no longer loop endlessly on unreachable waypoints (Woods) — navigation failures now count correctly even when Looting or SAIN combat interrupts the questing layer, so the distance tier-skip mechanism actually kicks in
+- **Fix:** Bots with no reachable waypoints left now get a fallback Explore objective instead of standing idle
+- **Fix:** Looting collider buffer increased 256 → 512 for dense-loot maps
+- 25 new unit tests for nav failure tracking and layer interruption (245 total)
+
 ### v1.6.0 (2026-03-02)
 - **Fix:** Bots no longer get stuck in "Complete" looting state — added action-level timeout safety net in LootingLayer and fixed missing `_target` reset in LootCorpseLogic ([#10](https://github.com/Blackhorse311/BotMind/issues/10))
 - **Fix:** Raiders and Rogues no longer receive questing objectives — explicit role allowlist prevents non-PMC/Scav bots from getting stuck on waypoints ([#10](https://github.com/Blackhorse311/BotMind/issues/10))

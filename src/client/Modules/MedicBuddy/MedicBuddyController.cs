@@ -59,7 +59,9 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
         private Vector3? _rallyPoint;
 
         // Bug Fix: Track bots that existed before our spawn request to avoid capturing them
-        private HashSet<int> _preExistingBotIds = new HashSet<int>();
+        // volatile: reassigned in SnapshotExistingBots and read in the OnBotCreated callback,
+        // consistent with this file's convention for cross-thread fields
+        private volatile HashSet<int> _preExistingBotIds = new HashSet<int>();
 
         // Standards Compliance Fix: Cache NavMeshPath to avoid allocation in GetDefensePosition
         private readonly NavMeshPath _cachedNavPath = new NavMeshPath();
@@ -1309,6 +1311,13 @@ namespace Blackhorse311.BotMind.Modules.MedicBuddy
         /// </summary>
         private bool IsOutOfPlayerView(Vector3 candidatePos)
         {
+            // Guard: player/Transform can be destroyed mid-search. Treat "can't tell"
+            // as out of view — the safe default for spawn placement.
+            if (!IsPlayerAccessible())
+            {
+                return true;
+            }
+
             // Zero Y before normalizing so the angle is purely horizontal.
             // Normalizing first then zeroing Y skews the result for height differences.
             Vector3 toCandidate = candidatePos - _player.Position;

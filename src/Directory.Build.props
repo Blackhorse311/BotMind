@@ -17,6 +17,14 @@
       Windows (Permanent):    System Properties > Advanced > Environment Variables
                               Add User variable: SPT_PATH = your\spt\path
 
+    Note: -p:SptPath on the command line is an MSBuild global property and always
+    wins over the .user file and the environment variable.
+
+    Deploy suppression:
+      dotnet build -p:NoDeploy=true
+    skips ALL post-build deploy copies (client plugin, voicelines, server DLL),
+    even when Directory.Build.props.user or SPT_PATH sets the SPT path.
+
     If SPT_PATH is not set, the build will still succeed but:
     - Reference DLLs will not be found (CS0246 errors for EFT/BepInEx types)
     - Post-build copy steps will be skipped
@@ -49,8 +57,8 @@
     <ModFolderName>Blackhorse311-BotMind</ModFolderName>
   </PropertyGroup>
 
-  <!-- Warn if SptPath is not configured -->
-  <Target Name="WarnMissingSptPath" BeforeTargets="ResolveAssemblyReferences" Condition="'$(SptPath)' == ''">
+  <!-- Warn if SptPath is not configured (tests build without it, so skip them) -->
+  <Target Name="WarnMissingSptPath" BeforeTargets="ResolveAssemblyReferences" Condition="'$(SptPath)' == '' AND '$(IsTestProject)' != 'true'">
     <Warning Text="SPT_PATH is not configured. Create src/Directory.Build.props.user (see .user.example) or set the SPT_PATH environment variable. References to EFT/BepInEx assemblies will not resolve." />
   </Target>
 </Project>

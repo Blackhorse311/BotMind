@@ -12,11 +12,9 @@
     <!-- Suppress CS9107: Primary constructor parameter captured warning (intentional pattern) -->
     <NoWarn>CS9107</NoWarn>
 
-    <!-- SPT server installation path -->
-    <SptPath Condition="'$(SPT_PATH)' != ''">$(SPT_PATH)</SptPath>
-    <SptServerPath>$(SptPath)\SPT</SptServerPath>
-    <UserModsPath>$(SptPath)\SPT\user\mods</UserModsPath>
-    <ModFolderName>Blackhorse311-BotMind</ModFolderName>
+    <!-- SPT server path derived from SptPath (resolved centrally in src/Directory.Build.props;
+         UserModsPath and ModFolderName also come from there) -->
+    <SptServerPath Condition="'$(SptPath)' != ''">$(SptPath)\SPT</SptServerPath>
   </PropertyGroup>
 
   <ItemGroup Condition="'$(SptPath)' != ''">
@@ -52,8 +50,9 @@
     </Reference>
   </ItemGroup>
 
-  <!-- Copy output to SPT user/mods folder (only when SPT_PATH is set) -->
-  <Target Name="CopyToMods" AfterTargets="Build" Condition="'$(SptPath)' != '' AND Exists('$(UserModsPath)')">
+  <!-- Copy output to SPT user/mods folder (only when SptPath is set).
+       Suppress with -p:NoDeploy=true (works even when Directory.Build.props.user sets SptPath). -->
+  <Target Name="CopyToMods" AfterTargets="Build" Condition="'$(SptPath)' != '' AND '$(NoDeploy)' != 'true' AND Exists('$(UserModsPath)')">
     <PropertyGroup>
       <ModOutputDir>$(UserModsPath)\$(ModFolderName)</ModOutputDir>
     </PropertyGroup>

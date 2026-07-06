@@ -111,8 +111,9 @@
     </Reference>
   </ItemGroup>
 
-  <!-- Post-build: Copy to BepInEx plugins folder -->
-  <Target Name="CopyToPlugins" AfterTargets="Build" Condition="'$(SptPath)' != '' AND Exists('$(BepInExPath)\plugins')">
+  <!-- Post-build: Copy to BepInEx plugins folder.
+       Suppress with -p:NoDeploy=true (works even when Directory.Build.props.user sets SptPath). -->
+  <Target Name="CopyToPlugins" AfterTargets="Build" Condition="'$(SptPath)' != '' AND '$(NoDeploy)' != 'true' AND Exists('$(BepInExPath)\plugins')">
     <PropertyGroup>
       <PluginOutputDir>$(BepInExPath)\plugins\$(ModFolderName)</PluginOutputDir>
       <VoicelinesSource>$(MSBuildThisFileDirectory)..\..\content\voicelines</VoicelinesSource>

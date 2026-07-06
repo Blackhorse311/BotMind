@@ -157,10 +157,11 @@ namespace Blackhorse311.BotMind.Configuration
 
         /// <summary>
         /// Override the maximum number of bots allowed on the map.
-        /// 0 = use game defaults (no override, no slot reservation).
-        /// When set above 0 and MedicBuddy is enabled, team-size slots are automatically
-        /// reserved so the medical team can always spawn without delay.
-        /// Example: 31 with Team Size 6 = 25 regular bots + 6 reserved for MedicBuddy.
+        /// 0 = use game defaults (no override).
+        /// MedicBuddy does not reserve slots from this cap. When the team is summoned,
+        /// BotLimitManager temporarily raises the current live bot limit by team size
+        /// (just-in-time), then restores it after spawning — so other bot limit mods
+        /// (ABPS, Donuts, etc.) are never fought over during normal gameplay.
         /// Higher values increase CPU load — see README for hardware recommendations.
         /// </summary>
         public static ConfigEntry<int> MaxBotsPerMap { get; private set; }
@@ -345,9 +346,9 @@ namespace Blackhorse311.BotMind.Configuration
                 0,
                 new ConfigDescription(
                     "Override max bots per map (0 = use game default). " +
-                    "When MedicBuddy is enabled, team-size slots are auto-reserved so the " +
-                    "medical team always has room to spawn. " +
-                    "Example: 31 with Team Size 6 = 25 regular bots + 6 reserved. " +
+                    "MedicBuddy does not reserve slots from this cap - when summoned, the " +
+                    "current bot limit is temporarily raised by team size and restored after " +
+                    "the team spawns, so it works alongside ABPS/Donuts limits. " +
                     "Higher values increase CPU load (see README for hardware recommendations).",
                     new AcceptableValueRange<int>(0, 31)));
         }
